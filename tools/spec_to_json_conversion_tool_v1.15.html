@@ -412,11 +412,24 @@
   .v12-review-control select{font:inherit;border:1px solid #bac5d2;border-radius:4px;padding:2px 4px;background:#fff;max-width:150px;}
   .v12-tag-chip{display:inline-flex;align-items:center;gap:2px;padding:1px 5px;border-radius:999px;background:#e2eaf5;color:#29496f;border:1px solid #b9c9dd;}
   .v12-tag-chip button{border:0;background:transparent;color:#8b2e27;padding:0;cursor:pointer;font-size:11px;}
-  .v12-state-reviewed{border-left:4px solid #2c824b !important;}
-  .v12-state-needs_fix{border-left:4px solid #d38611 !important;background:#fffaf0 !important;}
-  .v12-state-excluded{opacity:.58;border-left:4px solid #778392 !important;}
-  .v12-state-unreviewed{border-left:4px solid #aeb7c3 !important;}
+  .v12-state-reviewed{border-left:4px solid #23693b !important;background:#e7f5eb !important;}
+  .v12-state-needs_fix{border-left:4px solid #925800 !important;background:#fff2df !important;}
+  .v12-state-excluded{opacity:.6;border-left:4px solid #536174 !important;background:#edf0f3 !important;}
+  .v12-state-unreviewed{border-left:4px solid #b42318 !important;background:#fde2e2 !important;}
   .v12-table-review-cell{min-width:185px;background:#f8fafc !important;}
+  .v12-state-unreviewed .v12-table-review-cell{background:#fde2e2 !important;}
+  .v12-state-reviewed .v12-table-review-cell{background:#e7f5eb !important;}
+  .v12-state-needs_fix .v12-table-review-cell{background:#fff2df !important;}
+  .v12-state-excluded .v12-table-review-cell{background:#edf0f3 !important;}
+  .v12-status-select{font-weight:700;transition:background-color .15s,border-color .15s;}
+  .v12-state-unreviewed .v12-status-select{background:#f6b3ae !important;border-color:#b42318 !important;color:#7a170f;}
+  .v12-state-reviewed .v12-status-select{background:#addcb8 !important;border-color:#23693b !important;color:#123f22;}
+  .v12-state-needs_fix .v12-status-select{background:#fbd196 !important;border-color:#925800 !important;color:#5c3700;}
+  .v12-state-excluded .v12-status-select{background:#c9d1db !important;border-color:#536174 !important;color:#33404c;}
+  .v12-status-select option[value="unreviewed"]{background:#fde2e2;color:#7a170f;}
+  .v12-status-select option[value="reviewed"]{background:#e7f5eb;color:#123f22;}
+  .v12-status-select option[value="needs_fix"]{background:#fff2df;color:#5c3700;}
+  .v12-status-select option[value="excluded"]{background:#edf0f3;color:#33404c;}
   .v12-comparison-panel{display:none;max-width:1500px;margin:10px auto 0;padding:0 16px;font-family:var(--gothic);}
   body.v12-compare .v12-comparison-panel{display:block;}
   .v12-panel{background:#fff;border:1px solid var(--line);border-radius:7px;padding:10px 12px;box-shadow:0 1px 7px rgba(0,0,0,.07);}
@@ -6235,7 +6248,7 @@ function v14BuildControlContext(obj=data,profile=activeProfile){
 function v12Control(path,compact=false){
   const target=v14ControlTargetMap.get(path)||v12Targets(data,activeProfile).find(t=>t.path===path||t.key===path),key=target?.key||path,entry=v12ReviewEntry(key,data,activeProfile),allowed=v12AllowedTags(activeProfile),box=document.createElement("div");
   box.className="v12-review-control";box.dataset.v12ReviewPath=target?.path||path;box.dataset.v12NodeKey=key;box.onclick=e=>e.stopPropagation();
-  const status=document.createElement("select");status.title="確認状態";
+  const status=document.createElement("select");status.title="確認状態";status.className="v12-status-select";
   Object.entries(V12_STATUS_LABELS).forEach(([v,l])=>{const o=document.createElement("option");o.value=v;o.textContent=l;o.selected=entry.status===v;status.appendChild(o);});
   status.onchange=()=>{let reason=entry.reason||"";if(status.value==="excluded"&&!reason){reason=prompt("除外理由を入力してください。","")||"";if(!reason){status.value=entry.status;return;}}v12Checkpoint("status_change");entry.status=status.value;entry.reason=reason;entry.updated_at=new Date().toISOString();v12Checkpoint("status_change");v12MarkDirty("確認状態を変更");v12Decorate();};
   box.appendChild(status);
