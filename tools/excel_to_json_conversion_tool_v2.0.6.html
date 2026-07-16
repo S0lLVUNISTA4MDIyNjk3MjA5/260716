@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Excel → JSON 変換・確認ツール v2.0.5</title>
+  <title>Excel → JSON 変換・確認ツール v2.0.6</title>
   <style>
     :root {
       --bg: #e8e6e1;
@@ -425,7 +425,7 @@
 <body class="app-v20">
 <header class="ws-header" aria-label="Excel JSONツールバー">
   <div class="ws-brand-row">
-    <div class="ws-brand">Excel → JSON 変換・確認 <small>v2.0.5</small></div>
+    <div class="ws-brand">Excel → JSON 変換・確認 <small>v2.0.6</small></div>
     <span class="ws-purpose">Excel／CSV行データを人が確認・タグ付けし、後段照合に使えるJSONへ仕上げるツール</span>
     <span class="ws-spacer"></span>
     <button id="workspaceHelpBtn" class="ws-btn" type="button">使い方</button>
@@ -522,7 +522,7 @@
 </div>
 
 <div class="container">
-  <div class="small" style="margin:0 0 12px;">v2.0.5: 配色・タイポグラフィ・ボタン/バッジ/カード/モーダルのデザイントークンを仕様書PDF→JSONツールと統一（v2.0.4: ヘッダー・工程バー・目的別カードのレイアウトを整理）</div>
+  <div class="small" style="margin:0 0 12px;">v2.0.6: 手動でタグを設定・変更すると、未確認行が自動的に確認済みになるよう変更（仕様書PDF→JSONツールと同じ挙動）</div>
 
   <div class="info">
     Excel読込後のプレビュー表をドラッグすると、変換する行・列の範囲を設定できます。選択範囲の先頭行がヘッダー、次の行からがデータになります。
@@ -1928,7 +1928,7 @@ I/F = インターフェース"></textarea>
       trace_format: 'excel-row-trace-v1',
       schema_version: '1.0',
       generated_at: new Date().toISOString(),
-      generator: { name: 'Excel → JSON 変換・確認ツール', version: '2.0.5' },
+      generator: { name: 'Excel → JSON 変換・確認ツール', version: '2.0.6' },
       source: { file_name: fileName, sheet_name: sheet, profile_name: profile.profile_name, profile_version: profile.profile_version || '1.0' },
       tag_policy: {
         mode: profile.tag_policy?.mode || 'controlled', vocabulary_id: profile.tag_policy?.vocabulary_id || 'excel-row-tags',
@@ -3438,6 +3438,12 @@ I/F = インターフェース"></textarea>
     setByPath(row,fields.review,status); syncCurrentDataToOutput(); refreshAllViews();
   }
 
+  function markReviewedByManualTag(state,method) {
+    if(state.review_status==='unreviewed'){
+      state.review_status='reviewed'; state.review_method=method; state.reviewed_at=new Date().toISOString();
+    }
+  }
+
   function addTagToRow(index,rawTag) {
     const tag=canonicalTag(rawTag); if(!tag) return;
     const state=getRowState(index); const fields=reviewFieldNames();
@@ -3446,14 +3452,18 @@ I/F = インターフェース"></textarea>
       activeProfile.tag_policy.allowed_tags=uniqueStrings([...allowed,tag]); syncProfileToEditor(); renderAllowedTags(); updateWorkspaceProfileOptions();
     }
     state.tags=uniqueStrings([...(state.tags||[]),tag]); state.unregistered_tags=(state.unregistered_tags||[]).filter(x=>x!==tag);
+    markReviewedByManualTag(state,'manual_tagging');
     setByPath(currentData[index],fields.tags,state.tags); setByPath(currentData[index],fields.unregistered,state.unregistered_tags);
+    setByPath(currentData[index],fields.review,state.review_status);
     syncCurrentDataToOutput(); refreshAllViews();
   }
 
   function removeTagFromRow(index,tag,isUnregistered=false) {
     const state=getRowState(index); const fields=reviewFieldNames();
     if(isUnregistered) state.unregistered_tags=(state.unregistered_tags||[]).filter(x=>x!==tag); else state.tags=(state.tags||[]).filter(x=>x!==tag);
+    markReviewedByManualTag(state,'manual_tag_change');
     setByPath(currentData[index],fields.tags,state.tags); setByPath(currentData[index],fields.unregistered,state.unregistered_tags);
+    setByPath(currentData[index],fields.review,state.review_status);
     syncCurrentDataToOutput(); refreshAllViews();
   }
 
@@ -3509,7 +3519,7 @@ I/F = インターフェース"></textarea>
   const v20BaseBuildTraceOutput=buildTraceOutput;
   buildTraceOutput=function(records,profile){
     ensureRowStates(); const result=v20BaseBuildTraceOutput(records,profile);
-    result.schema_version='1.1'; result.id_scheme=V20_ID_SCHEME; result.generator.version='2.0.5';
+    result.schema_version='1.1'; result.id_scheme=V20_ID_SCHEME; result.generator.version='2.0.6';
     result.tag_policy.tag_aliases=normalizeAliasMap(profile?.tag_policy?.tag_aliases);
     result._trace_records.forEach((record,index)=>{
       const state=currentCellMeta[index]?.__row_state;
