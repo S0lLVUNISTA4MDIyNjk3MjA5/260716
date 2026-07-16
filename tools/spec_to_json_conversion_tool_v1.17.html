@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>仕様書JSON 変換・確認ツール v1.16 取扱説明書準拠UI版</title>
+<title>仕様書JSON 変換・確認ツール v1.17 取扱説明書準拠UI版</title>
 <script src="https://unpkg.com/tiny-segmenter@0.2.0/dist/tiny-segmenter-0.2.0.js" onerror="window.__tinySegmenterLoadFailed=true"></script>
 <style>
   :root{
@@ -645,7 +645,7 @@
   }
 
 
-  /* ===== v1.16 取扱説明書準拠UI（v1.16: 確認状態の色分け表示を追加） ===== */
+  /* ===== v1.17 取扱説明書準拠UI（v1.17: 確認済み／照合用JSONの再読込で確認状態・タグを継承／ v1.16: 確認状態の色分け表示を追加） ===== */
   .ui15-header{box-shadow:0 2px 8px rgba(0,0,0,.08);}
   .ui15-brand-row,.ui15-primary-row,.ui15-support-row{display:flex;align-items:center;gap:8px;padding-left:16px;padding-right:16px;}
   .ui15-brand-row{min-height:43px;padding-top:7px;padding-bottom:6px;background:#fff;border-bottom:1px solid #e2e6eb;}
@@ -802,7 +802,7 @@
     </article>
     <article class="ui15-usecase">
       <h3>既存JSONの確認を続ける</h3>
-      <p>作業中JSONまたは素のJSONを開きます。ブラウザの自動保存が残っていれば作業復旧も利用できます。</p>
+      <p>作業中JSON・確認済みJSON・照合用JSON・素のJSONを開きます。確認済み／照合用JSONからは確認状態・タグを引き継ぐため、複数人での分担や一時保存にも使えます。ブラウザの自動保存が残っていれば作業復旧も利用できます。</p>
       <div class="ui15-usecase-actions"><button class="btn primary" type="button" data-ui15-action="json">JSONを開く</button><button class="btn" type="button" data-ui15-action="restore">作業復旧</button></div>
     </article>
     <article class="ui15-usecase">
@@ -1563,9 +1563,19 @@ function loadJsonText(text, name){
   let obj;
   try{ obj = JSON.parse(text); }
   catch(e){ toast("JSONの解析に失敗しました: " + e.message, true); return; }
-  obj = prepareTraceExportForDisplay(obj, name);
-  if(isTraceExportJson(obj) && !String(activeProfile?.profile_kind || "").startsWith("trace_export")){
-    setActiveProfile(TRACE_TEXT_PROFILE);
+  let docModelReviewOrder = null;
+  let docModelVocabulary = null;
+  if(isDocumentModelJson(obj)){
+    const conv = documentModelToNativeAndReview(obj);
+    obj = conv.native;
+    docModelReviewOrder = conv.reviewOrder;
+    docModelVocabulary = conv.vocabulary;
+    if(String(activeProfile?.profile_kind || "").startsWith("trace_export")) setActiveProfile(DEFAULT_PROFILE);
+  }else{
+    obj = prepareTraceExportForDisplay(obj, name);
+    if(isTraceExportJson(obj) && !String(activeProfile?.profile_kind || "").startsWith("trace_export")){
+      setActiveProfile(TRACE_TEXT_PROFILE);
+    }
   }
   let errs = validate(obj);
   if(errs.length){
@@ -1581,6 +1591,13 @@ function loadJsonText(text, name){
     }
   }
   data = obj;
+  let restoredCount = 0;
+  if(docModelReviewOrder){
+    v12MergeVocabulary(activeProfile, docModelVocabulary);
+    restoredCount = v12SeedReviewFromOrder(data, activeProfile, docModelReviewOrder);
+  }else if(isTraceExportJson(data)){
+    restoredCount = v12RestoreReviewFromTrace(data);
+  }
   v18ResetJsonView("A");
   original = deepCopy(obj);
   editing = false;
@@ -1593,7 +1610,8 @@ function loadJsonText(text, name){
   updateChrome();
   render();
   applySplit();
-  toast((name ? name + " を" : "") + `読み込みました（様式: ${activeProfile.profile_name}）。`);
+  toast((name ? name + " を" : "") + `読み込みました（様式: ${activeProfile.profile_name}）。` +
+    (restoredCount ? ` 確認状態・タグを${restoredCount}件復元しました。` : ""));
 }
 
 function isTraceExportJson(obj){
@@ -1733,6 +1751,168 @@ function prepareTraceExportForDisplay(obj, fallbackName){
   obj._trace_text_sections = buildTraceTextSections(obj._trace_records);
   obj._trace_table_sections = buildTraceTableSections(obj._trace_records);
   return obj;
+}
+
+/* ===== 照合用JSON／確認済みJSON再読込時の確認状態・タグ継承 =====
+   照合用JSON（_trace_records）や確認済みJSON（DocumentModel 2.0）を読み込んだとき、
+   各レコードが保持する review_status・tags を作業レビューモデルへ復元する。
+   要素IDは内容から決定的に再生成されるため、復元対象は確認状態とタグに絞る。 */
+
+function isDocumentModelJson(obj){
+  return !!(obj && typeof obj === "object" && !Array.isArray(obj) &&
+    Array.isArray(obj.sections) &&
+    obj.sections.some(s => s && Array.isArray(s.blocks)) &&
+    (obj.schema_version === "2.0" || (obj.document && obj.provenance)));
+}
+
+function uniqTagArray(arr){
+  const out = [];
+  (Array.isArray(arr) ? arr : []).forEach(v => {
+    const s = String(v == null ? "" : v).trim();
+    if(s && !out.includes(s)) out.push(s);
+  });
+  return out;
+}
+
+/* 読み込んだJSONが持つ照合タグ語彙を表示プロファイルの許可タグ辞書へ取り込む。
+   これがないと、出力時に登録済みだったタグが再読込で未登録タグ扱いになる。 */
+function v12MergeVocabulary(profile, tags){
+  const add = uniqTagArray(tags);
+  if(!profile || !add.length) return;
+  profile.tag_policy = profile.tag_policy || {mode: "controlled", allow_free_input: false, allowed_tags: []};
+  const current = Array.isArray(profile.tag_policy.allowed_tags) ? profile.tag_policy.allowed_tags : [];
+  profile.tag_policy.allowed_tags = uniqTagArray([...current, ...add]);
+}
+
+/* v12Targets が _trace_text_sections / _trace_table_sections を走査する順序と
+   一致するように、照合レコードを対象順に並べ替える（buildTrace*Sections と同じ集約規則）。 */
+function traceRecordsInDisplayOrder(records, view){
+  const list = Array.isArray(records) ? records : [];
+  const groups = new Map();
+  list.forEach((r, index) => {
+    const key = traceRecordSectionKey(r, index);
+    let g = groups.get(key);
+    if(!g){ g = {seq: [], blocks: new Map()}; groups.set(key, g); }
+    if(view === "table"){
+      let b = g.blocks.get("__table__");
+      if(!b){ b = {recs: []}; g.blocks.set("__table__", b); g.seq.push(b); }
+      b.recs.push(r);
+      return;
+    }
+    const blockId = String(r.source_block_id || r.id || r.trace_id || index);
+    const kind = String(r.block_type || r.trace_category || "text");
+    const traceText = String(r.trace_text || r.source_raw_text || "");
+    if(kind === "list_item"){
+      const mk = `list:${blockId}`;
+      let b = g.blocks.get(mk);
+      if(!b){ b = {recs: []}; g.blocks.set(mk, b); g.seq.push(b); }
+      if(traceText) b.recs.push(r);
+      return;
+    }
+    if(kind === "table_row"){
+      const mk = `table:${blockId}`;
+      let b = g.blocks.get(mk);
+      if(!b){ b = {recs: []}; g.blocks.set(mk, b); g.seq.push(b); }
+      b.recs.push(r);
+      return;
+    }
+    if(traceText) g.seq.push({recs: [r]});
+  });
+  const order = [];
+  groups.forEach(g => g.seq.forEach(b => b.recs.forEach(r => order.push(r))));
+  return order;
+}
+
+function traceReviewFromRecord(r){
+  return {
+    status: r.review_status || "unreviewed",
+    tags: r.tags,
+    unregistered_tags: r.unregistered_tags,
+    reason: r.exclude_reason || r.review_comment || ""
+  };
+}
+
+/* DocumentModel 2.0（確認済みJSON）を標準章・節スキーマの文書へ変換し、
+   対象順に並んだレビュー情報も返す。 */
+function documentModelToNativeAndReview(model){
+  const order = [];
+  const sections = (model.sections || []).map(sec => {
+    const content = [];
+    (sec.blocks || []).forEach(block => {
+      if(block.type === "paragraph"){
+        content.push(String(block.text || ""));
+        order.push(block);
+      }else if(block.type === "list"){
+        content.push({type: "list", items: (block.items || []).map(it => String(it.text || ""))});
+        (block.items || []).forEach(it => order.push(it));
+      }else if(block.type === "table"){
+        const headers = Array.isArray(block.columns) ? block.columns.map(h => String(h)) : [];
+        const rows = (block.rows || []).map(row => headers.map(h => String(row.cells?.[h] ?? "")));
+        content.push({type: "table", headers, rows});
+        (block.rows || []).forEach(row => order.push(row));
+      }
+    });
+    return {
+      section_number: String(sec.number || ""),
+      section_title: String(sec.title || ""),
+      content
+    };
+  });
+  const native = {
+    file_name: model.document?.file_name || "document.json",
+    chapter_number: "",
+    chapter_title: model.document?.title || model.document?.file_name || "",
+    sections
+  };
+  const reviewOrder = order.map(x => ({
+    status: x.review_status || "unreviewed",
+    tags: x.tags,
+    unregistered_tags: x.unregistered_tags,
+    reason: x.exclude_reason || ""
+  }));
+  const vocab = [];
+  if(Array.isArray(model.tag_policy?.allowed_tags)) model.tag_policy.allowed_tags.forEach(t => vocab.push(t));
+  order.forEach(x => (Array.isArray(x.tags) ? x.tags : []).forEach(t => vocab.push(t)));
+  return {native, reviewOrder, vocabulary: uniqTagArray(vocab)};
+}
+
+/* 対象順に並んだレビュー情報を、指定様式の対象キーへ割り当てる。 */
+function v12SeedReviewFromOrder(obj, profile, reviewOrder){
+  if(!obj || !profile || !Array.isArray(reviewOrder) || !reviewOrder.length) return 0;
+  const targets = v12Targets(obj, profile);
+  const now = new Date().toISOString();
+  let applied = 0;
+  targets.forEach((t, i) => {
+    const rv = reviewOrder[i];
+    if(!rv) return;
+    const status = V12_STATUS_LABELS[rv.status] ? rv.status : "unreviewed";
+    const tags = uniqTagArray(rv.tags);
+    const unreg = uniqTagArray(rv.unregistered_tags);
+    if(status === "unreviewed" && !tags.length && !unreg.length) return;
+    const e = v12ReviewEntry(t.key, obj, profile);
+    e.status = status;
+    e.tags = tags;
+    e.unregistered_tags = unreg;
+    if(rv.reason) e.reason = rv.reason;
+    e.updated_at = now;
+    applied++;
+  });
+  return applied;
+}
+
+/* 照合用JSONの表示ビュー（文章・表）双方へ確認状態・タグを復元する。 */
+function v12RestoreReviewFromTrace(obj){
+  const recs = obj && Array.isArray(obj._trace_records) ? obj._trace_records : [];
+  if(!recs.length) return 0;
+  const vocab = [];
+  recs.forEach(r => (Array.isArray(r.tags) ? r.tags : []).forEach(t => vocab.push(t)));
+  v12MergeVocabulary(TRACE_TEXT_PROFILE, vocab);
+  v12MergeVocabulary(TRACE_TABLE_PROFILE, vocab);
+  const textOrder = traceRecordsInDisplayOrder(recs, "text").map(traceReviewFromRecord);
+  const tableOrder = traceRecordsInDisplayOrder(recs, "table").map(traceReviewFromRecord);
+  const a = v12SeedReviewFromOrder(obj, TRACE_TEXT_PROFILE, textOrder);
+  v12SeedReviewFromOrder(obj, TRACE_TABLE_PROFILE, tableOrder);
+  return a;
 }
 
 function handleFile(file){
@@ -4730,9 +4910,19 @@ function loadDocB(text, name){
   let obj;
   try{ obj = JSON.parse(text); }
   catch(e){ toast("文書Bの解析に失敗しました: " + e.message, true); return false; }
-  obj = prepareTraceExportForDisplay(obj, name);
-  if(isTraceExportJson(obj) && !String(activeProfileB?.profile_kind || "").startsWith("trace_export")){
-    setActiveProfileB(TRACE_TEXT_PROFILE);
+  let docModelReviewOrderB = null;
+  let docModelVocabularyB = null;
+  if(isDocumentModelJson(obj)){
+    const conv = documentModelToNativeAndReview(obj);
+    obj = conv.native;
+    docModelReviewOrderB = conv.reviewOrder;
+    docModelVocabularyB = conv.vocabulary;
+    if(String(activeProfileB?.profile_kind || "").startsWith("trace_export")) setActiveProfileB(DEFAULT_PROFILE);
+  }else{
+    obj = prepareTraceExportForDisplay(obj, name);
+    if(isTraceExportJson(obj) && !String(activeProfileB?.profile_kind || "").startsWith("trace_export")){
+      setActiveProfileB(TRACE_TEXT_PROFILE);
+    }
   }
   let prof = activeProfileB;
   let errs = validateAgainst(obj, prof);
@@ -4750,6 +4940,13 @@ function loadDocB(text, name){
     }
   }
   dataB = obj; profileB = prof; dataBName = name || "";
+  let restoredCountB = 0;
+  if(docModelReviewOrderB){
+    v12MergeVocabulary(prof, docModelVocabularyB);
+    restoredCountB = v12SeedReviewFromOrder(dataB, prof, docModelReviewOrderB);
+  }else if(isTraceExportJson(dataB)){
+    restoredCountB = v12RestoreReviewFromTrace(dataB);
+  }
   v18ResetJsonView("B");
   embStoreB = null;
   const secCount = (obj[prof.display.sections_field] || []).length;
@@ -4757,7 +4954,8 @@ function loadDocB(text, name){
   embUpdateButtons();
   showPaneB();
   applySplit();
-  toast(`文書Bを読み込みました（様式: ${prof.profile_name}${autoDetected ? "・自動判別" : ""}）。`);
+  toast(`文書Bを読み込みました（様式: ${prof.profile_name}${autoDetected ? "・自動判別" : ""}）。` +
+    (restoredCountB ? ` 確認状態・タグを${restoredCountB}件復元しました。` : ""));
   return true;
 }
 
