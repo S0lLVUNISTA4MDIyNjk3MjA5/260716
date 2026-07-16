@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>仕様書JSON 変換・確認ツール v1.16 取扱説明書準拠UI版</title>
+<title>仕様書JSON 変換・確認ツール v1.17 取扱説明書準拠UI版</title>
 <script src="https://unpkg.com/tiny-segmenter@0.2.0/dist/tiny-segmenter-0.2.0.js" onerror="window.__tinySegmenterLoadFailed=true"></script>
 <style>
   :root{
@@ -645,7 +645,7 @@
   }
 
 
-  /* ===== v1.16 取扱説明書準拠UI（v1.16: 確認状態の色分け表示を追加） ===== */
+  /* ===== v1.17 取扱説明書準拠UI（v1.17: ツールバー初期化で「作業中JSON」「確認済みJSON」「検証結果」「文書・版情報」「未確認を一括確認」「元に戻す／やり直す」「作業復旧」等のボタンが消える不具合を修正／ v1.16: 確認状態の色分け表示を追加） ===== */
   .ui15-header{box-shadow:0 2px 8px rgba(0,0,0,.08);}
   .ui15-brand-row,.ui15-primary-row,.ui15-support-row{display:flex;align-items:center;gap:8px;padding-left:16px;padding-right:16px;}
   .ui15-brand-row{min-height:43px;padding-top:7px;padding-bottom:6px;background:#fff;border-bottom:1px solid #e2e6eb;}
@@ -6659,14 +6659,15 @@ $("#btn-json-copy-b").onclick=()=>v18CopyJson("B");
     const box=q("#v12-shellbar .v12-shell-actions");if(!box||box.dataset.ui14Done)return;
     box.dataset.ui14Done="1";
     const save=document.getElementById("v12-save-state");
-    box.textContent="";
-    box.appendChild(makeGroup("確認",["v12-mark-all","v12-doc-meta","v12-validate"]));
-    box.appendChild(makeGroup("出力",["v12-export-work","v12-export-confirmed"]));
+    const confirmGroup=makeGroup("確認",["v12-mark-all","v12-doc-meta","v12-validate"]);
+    const outputGroup=makeGroup("出力",["v12-export-work","v12-export-confirmed"]);
     const more=document.createElement("details");more.className="ui14-inline-menu ui14-shell-more";
     const sum=document.createElement("summary");sum.textContent="履歴・復旧";more.appendChild(sum);
     const panel=document.createElement("div");panel.className="ui14-inline-menu-panel";
     ["v12-undo","v12-redo","v12-restore","v12-delete-save"].forEach(id=>{const el=document.getElementById(id);if(el)panel.appendChild(el);});
-    more.appendChild(panel);box.appendChild(more);if(save)box.appendChild(save);
+    more.appendChild(panel);
+    box.textContent="";
+    box.appendChild(confirmGroup);box.appendChild(outputGroup);box.appendChild(more);if(save)box.appendChild(save);
   }
   function syncHeaderOffset(){const h=document.querySelector("header");if(h)document.documentElement.style.setProperty("--ui14-header-height",Math.ceil(h.getBoundingClientRect().height)+"px");}
   function closeMenusOnOutside(ev){document.querySelectorAll("details.ui14-menu[open],details.ui14-inline-menu[open]").forEach(d=>{if(!d.contains(ev.target))d.removeAttribute("open");});}
@@ -6715,9 +6716,11 @@ $("#btn-json-copy-b").onclick=()=>v18CopyJson("B");
     move("v12-doc-meta","ui15-other-actions",{text:"文書・版情報"});
     move("btn-revert","ui15-other-actions",{text:"読込時へ戻す"});
     const shell=q("#v12-shellbar .v12-shell-actions");if(shell){
-      const save=byId("v12-save-state");shell.textContent="";shell.className="v12-shell-actions ui15-shell-utility";
+      const save=byId("v12-save-state");
+      const historyEls=["v12-undo","v12-redo","v12-restore","v12-delete-save"].map(byId).filter(Boolean);
+      shell.textContent="";shell.className="v12-shell-actions ui15-shell-utility";
       const label=document.createElement("span");label.className="ui15-action-label";label.textContent="履歴・復旧";shell.appendChild(label);
-      ["v12-undo","v12-redo","v12-restore","v12-delete-save"].forEach(id=>{const el=byId(id);if(el)shell.appendChild(el);});
+      historyEls.forEach(el=>shell.appendChild(el));
       if(save)shell.appendChild(save);
     }
   }
