@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Excel → JSON 変換・確認ツール v2.0.6</title>
+  <title>Excel → JSON 変換・確認ツール v2.0.7</title>
   <style>
     :root {
       --bg: #e8e6e1;
@@ -417,6 +417,19 @@
   .review-column-head{min-width:285px;position:sticky;left:42px;z-index:3;background:#e8edf4!important;}.row-review-cell{min-width:285px;background:#f8fafc;position:sticky;left:42px;z-index:1;border-right:2px solid #cbd5e1;}.row-review-wrap{display:grid;gap:5px;}.row-review-top{display:flex;gap:5px;align-items:center;flex-wrap:wrap;}.row-review-select,.row-review-reason,.row-tag-input{border:1px solid #bac5d2;border-radius:4px;padding:4px 6px;font:inherit;background:#fff;}.row-review-select{max-width:110px;}.row-review-reason{width:100%;font-size:11px;}.row-tag-entry{display:flex;gap:4px;}.row-tag-input{min-width:110px;flex:1;font-size:11px;}.row-tag-add{border:1px solid #b9c9dd;background:#e2eaf5;color:#29496f;border-radius:4px;padding:3px 6px;font-size:10px;cursor:pointer;}.row-tag-chips{display:flex;gap:3px;flex-wrap:wrap;}.row-tag-chip{display:inline-flex;gap:2px;align-items:center;border:1px solid #b9c9dd;background:#e2eaf5;color:#29496f;border-radius:999px;padding:1px 5px;font-size:10px;}.row-tag-chip.unregistered{background:#fde9e7;border-color:#e1a39d;color:#a62c21;}.row-tag-chip button{border:0;background:transparent;color:#8b2e27;padding:0;cursor:pointer;font-size:10px;}.review-state-reviewed{border-left:4px solid #23693b!important;background:#e7f5eb!important}.review-state-needs_fix{border-left:4px solid #925800!important;background:#fff2df!important}.review-state-excluded{border-left:4px solid #536174!important;background:#edf0f3!important;opacity:.8}.review-state-unreviewed{border-left:4px solid #b42318!important;background:#fde2e2!important}.row-review-select{font-weight:700;transition:background-color .15s,border-color .15s;}.review-state-unreviewed .row-review-select{background:#f6b3ae!important;border-color:#b42318!important;color:#7a170f;}.review-state-reviewed .row-review-select{background:#addcb8!important;border-color:#23693b!important;color:#123f22;}.review-state-needs_fix .row-review-select{background:#fbd196!important;border-color:#925800!important;color:#5c3700;}.review-state-excluded .row-review-select{background:#c9d1db!important;border-color:#536174!important;color:#33404c;}.row-review-select option[value="unreviewed"]{background:#fde2e2;color:#7a170f;}.row-review-select option[value="reviewed"]{background:#e7f5eb;color:#123f22;}.row-review-select option[value="needs_fix"]{background:#fff2df;color:#5c3700;}.row-review-select option[value="excluded"]{background:#edf0f3;color:#33404c;}
   .tag-alias-editor{width:100%;min-height:82px;border:1px solid #cbd5e1;border-radius:6px;padding:8px;font:12px/1.5 ui-monospace,monospace;resize:vertical;}
   .ws-modal-backdrop{position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;padding:18px;}.ws-modal-backdrop[hidden]{display:none;}.ws-modal{width:min(980px,100%);max-height:88vh;overflow:auto;background:#fff;border:1px solid var(--ws-line);border-radius:8px;box-shadow:0 12px 40px rgba(0,0,0,.28);}.ws-modal>header{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:8px;background:var(--ws-chrome);border-bottom:1px solid var(--ws-line);padding:12px 16px;}.ws-modal>header h2{margin:0;color:var(--ws-indigo);font-size:17px;font-family:"Yu Mincho","Hiragino Mincho ProN",serif;letter-spacing:.08em;}.ws-modal>header button{margin-left:auto;border:0;background:transparent;font-size:22px;cursor:pointer;color:#526174;}.ws-modal-body{padding:14px;}.ws-modal-actions{position:sticky;bottom:0;display:flex;gap:8px;justify-content:flex-end;align-items:center;flex-wrap:wrap;background:#f8fafc;border-top:1px solid #d6dde6;padding:10px 14px;}.ws-modal-actions button{border:1px solid var(--ws-line);background:#fff;color:#334155;border-radius:4px;padding:7px 12px;font-weight:700;cursor:pointer;}.ws-modal-actions button.primary{background:var(--ws-indigo);border-color:var(--ws-indigo);color:#fff;}.ws-modal-actions button.success{background:var(--ws-green);border-color:var(--ws-green);color:#fff;}.ws-form-grid{display:grid;grid-template-columns:repeat(2,minmax(220px,1fr));gap:10px;}.ws-form-grid label{display:grid;gap:4px;font-size:12px;font-weight:700;color:#465569;}.ws-form-grid input,.ws-form-grid textarea,.ws-form-grid select{width:100%;border:1px solid #bcc6d2;border-radius:5px;padding:7px;font:inherit;background:#fff;}.ws-form-grid textarea{min-height:80px;resize:vertical;}.ws-json-editor{width:100%;min-height:380px;border:1px solid #bcc6d2;border-radius:5px;padding:10px;font:12px/1.55 ui-monospace,monospace;white-space:pre;resize:vertical;}.ws-json-pre{margin:0;background:#111827;color:#e5e7eb;border-radius:6px;padding:14px;max-height:65vh;overflow:auto;font:12px/1.55 ui-monospace,monospace;white-space:pre;}.ws-validation-list{display:grid;gap:5px;max-height:55vh;overflow:auto;}.ws-validation-item{display:grid;grid-template-columns:70px minmax(120px,240px) 1fr;gap:7px;padding:6px 8px;border:1px solid #dce2e9;border-radius:5px;font-size:12px;}.ws-validation-item.error{background:#fef2f2;color:#991b1b}.ws-validation-item.warning{background:#fff7ed;color:#9a3412}.ws-validation-item.info{background:#eff6ff;color:#1e40af}.ws-bulk-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:12px;}.ws-bulk-card{border:1px solid #cfd7e2;border-radius:7px;background:#f8fafc;padding:9px 10px;}.ws-bulk-card strong{display:block;font-size:20px;color:var(--ws-indigo);}.ws-note{font-size:12px;line-height:1.65;color:#59677a;background:#f6f7f9;border-left:4px solid var(--ws-indigo);padding:8px 10px;margin:8px 0;}
+.ws-manual-body{display:grid;grid-template-columns:190px minmax(0,1fr);gap:12px;min-height:420px;}
+.ws-manual-nav{display:grid;align-content:start;gap:5px;border-right:1px solid var(--ws-line);padding-right:10px;}
+.ws-manual-nav button{text-align:left;}
+.ws-manual-content{overflow:auto;max-height:64vh;padding-right:5px;}
+.ws-guide-section{display:none;}
+.ws-guide-section.active{display:block;}
+.ws-guide-section h3{font-size:16px;color:var(--ws-indigo);margin:2px 0 10px;}
+.ws-guide-section h4{font-size:13px;color:#40516a;margin:16px 0 7px;}
+.ws-guide-section ol,.ws-guide-section ul{padding-left:22px;line-height:1.75;font-size:12px;}
+.ws-output-table{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:4px;}
+.ws-output-table th,.ws-output-table td{border:1px solid var(--ws-line);padding:6px 7px;text-align:left;vertical-align:top;}
+.ws-output-table th{background:#edf2f7;}
+@media(max-width:760px){.ws-manual-body{grid-template-columns:1fr;}.ws-manual-nav{grid-template-columns:repeat(2,1fr);border-right:0;border-bottom:1px solid var(--ws-line);padding:0 0 8px;}}
   .app-v20 .tabs{position:relative;top:auto;}
   @media(max-width:900px){.ws-form-grid{grid-template-columns:1fr}.review-column-head,.row-review-cell{position:static}.ws-brand-row,.ws-primary-row,.ws-support-row{align-items:stretch}.ws-current-profile{width:100%}}
 
@@ -425,7 +438,7 @@
 <body class="app-v20">
 <header class="ws-header" aria-label="Excel JSONツールバー">
   <div class="ws-brand-row">
-    <div class="ws-brand">Excel → JSON 変換・確認 <small>v2.0.6</small></div>
+    <div class="ws-brand">Excel → JSON 変換・確認 <small>v2.0.7</small></div>
     <span class="ws-purpose">Excel／CSV行データを人が確認・タグ付けし、後段照合に使えるJSONへ仕上げるツール</span>
     <span class="ws-spacer"></span>
     <button id="workspaceHelpBtn" class="ws-btn" type="button">使い方</button>
@@ -522,7 +535,7 @@
 </div>
 
 <div class="container">
-  <div class="small" style="margin:0 0 12px;">v2.0.6: 手動でタグを設定・変更すると、未確認行が自動的に確認済みになるよう変更（仕様書PDF→JSONツールと同じ挙動）</div>
+  <div class="small" style="margin:0 0 12px;">v2.0.7: 「使い方」を仕様書PDF→JSONツール同様のナビ付きガイドへ拡充（基本フロー・様式登録・タグ付け・範囲選択/方眼紙・出力の違い・保存/復旧の6項目）</div>
 
   <div class="info">
     Excel読込後のプレビュー表をドラッグすると、変換する行・列の範囲を設定できます。選択範囲の先頭行がヘッダー、次の行からがデータになります。
@@ -1928,7 +1941,7 @@ I/F = インターフェース"></textarea>
       trace_format: 'excel-row-trace-v1',
       schema_version: '1.0',
       generated_at: new Date().toISOString(),
-      generator: { name: 'Excel → JSON 変換・確認ツール', version: '2.0.6' },
+      generator: { name: 'Excel → JSON 変換・確認ツール', version: '2.0.7' },
       source: { file_name: fileName, sheet_name: sheet, profile_name: profile.profile_name, profile_version: profile.profile_version || '1.0' },
       tag_policy: {
         mode: profile.tag_policy?.mode || 'controlled', vocabulary_id: profile.tag_policy?.vocabulary_id || 'excel-row-tags',
@@ -3519,7 +3532,7 @@ I/F = インターフェース"></textarea>
   const v20BaseBuildTraceOutput=buildTraceOutput;
   buildTraceOutput=function(records,profile){
     ensureRowStates(); const result=v20BaseBuildTraceOutput(records,profile);
-    result.schema_version='1.1'; result.id_scheme=V20_ID_SCHEME; result.generator.version='2.0.6';
+    result.schema_version='1.1'; result.id_scheme=V20_ID_SCHEME; result.generator.version='2.0.7';
     result.tag_policy.tag_aliases=normalizeAliasMap(profile?.tag_policy?.tag_aliases);
     result._trace_records.forEach((record,index)=>{
       const state=currentCellMeta[index]?.__row_state;
@@ -3649,8 +3662,85 @@ I/F = インターフェース"></textarea>
     wireAiGuideTabs();
   }
 
+  const WS_MANUAL_SECTIONS = [
+    { id: 'basic', label: '基本フロー', title: 'Excelから照合用JSONを作る', body: `
+      <ol>
+        <li>「適用様式」を選択します。未登録なら「JSON貼付登録」または「様式ファイル登録」を使用します。</li>
+        <li>「Excelを開く」でファイルを選択し、シート・ヘッダー行・データ開始行を指定します。</li>
+        <li>プレビュー表をドラッグして変換範囲を調整し、結合セル展開・空白補完・UNKNOWN／null判定を設定して変換します。</li>
+        <li>表形式で内容を確認し、各行を「確認済み」「要修正」「除外」に分類してタグを付けます。</li>
+        <li>「検証結果」でエラー0を確認します。</li>
+        <li>「確認済みJSON」または「照合用JSON出力」を実行します。</li>
+      </ol>
+      <div class="ws-note">意味的な要求照合の最終判定は後段の照合ツールで行います。本ツールは確認履歴・タグ・安定IDを付けたJSONへ整形するところまでを担当します。</div>
+      <p><button class="ws-btn primary" type="button" data-ws-action="open">Excelを開く</button></p>` },
+    { id: 'profile', label: '様式登録', title: '様式プロファイルを登録する', body: `
+      <h4>生成AIの回答を貼り付ける</h4>
+      <ol>
+        <li>「様式・タグ」の「JSON貼付登録」を開きます。</li>
+        <li>生成AIのチャット回答を貼り付けます。</li>
+        <li>必要なら登録するプロファイル名を変更します。</li>
+        <li>「検証」後、「登録して適用」を押します。</li>
+      </ol>
+      <h4>ほかの方法</h4>
+      <ul>
+        <li>JSONファイル: 「様式ファイル登録」</li>
+        <li>生成AIのプロンプト・仕様書を参照: 「AIで様式作成」</li>
+        <li>既存様式を複製して調整: 「様式・タグ辞書編集」タブの「複製して新規」</li>
+      </ul>
+      <p><button class="ws-btn primary" type="button" data-ws-action="paste-profile">JSON貼付登録を開く</button></p>` },
+    { id: 'tag', label: 'タグ付け', title: 'タグを付ける4つの入口', body: `
+      <ol>
+        <li>各行の「確認状態・照合タグ」欄から個別に付与します。</li>
+        <li>「様式・タグ辞書編集」でタグ辞書・キーワードルール（OR／AND）を設定します。</li>
+        <li>「照合タグ自動付与」でルールに基づき全行へ一括付与します。</li>
+        <li>「候補を抽出」でデータからタグ候補を抽出し、辞書へ登録します。</li>
+      </ol>
+      <div class="ws-note">手動でタグを追加・削除すると、未確認の行は自動的に「確認済み」へ変わります。要修正・除外・すでに確認済みの行は上書きしません。</div>
+      <p><button class="ws-btn primary" type="button" data-ws-tab="profileTab">様式・タグへ進む</button></p>` },
+    { id: 'range', label: '範囲選択・方眼紙', title: '変換範囲の選択と方眼紙処理', body: `
+      <ol>
+        <li>Excel読込後のプレビュー表をドラッグし、変換する行・列の範囲を選択します。選択範囲の先頭行がヘッダー、次の行からがデータになります。</li>
+        <li>結合セルは左上の値を結合範囲へ展開できます。</li>
+        <li>空白セルは「補完しない」「上／下／左／右の値で補完」から選択できます。</li>
+        <li>「JSON nullと判定する文字」に一致した値はnullへ変換されます。</li>
+        <li>判定できない値は<code>"UNKNOWN"</code>として残ります。</li>
+      </ol>
+      <div class="ws-note">補完・結合展開したセルは表で色表示されるため、あとから元の空白セルと区別できます。</div>
+      <p><button class="ws-btn primary" type="button" data-ws-tab="importTab">整形へ進む</button></p>` },
+    { id: 'output', label: '出力の違い', title: '出力ファイルの使い分け', body: `
+      <table class="ws-output-table"><thead><tr><th>出力</th><th>用途</th></tr></thead><tbody>
+        <tr><td>変換JSON</td><td>「JSONダウンロード」「JSON Lines保存」。確認状態を問わず、変換直後の内容をそのまま出力します。</td></tr>
+        <tr><td>作業中JSON</td><td>編集状態、行UID、確認履歴、使用中の様式プロファイルを含み、後日作業を再開できます。</td></tr>
+        <tr><td>確認済みJSON</td><td>未確認・要修正・未登録タグがない場合だけ出力できるDocumentModel 2.0形式の確定版です。</td></tr>
+        <tr><td>照合用JSON</td><td>後段照合ツール向けschema 1.1。安定ID・content_hashを含みます。</td></tr>
+      </tbody></table>
+      <p><button class="ws-btn primary success" type="button" data-ws-action="trace-export">照合用JSON出力</button></p>` },
+    { id: 'restore', label: '保存・復旧', title: '自動保存と作業復旧', body: `
+      <ul>
+        <li>編集後、約1.5秒でブラウザのIndexedDBへ自動保存します。</li>
+        <li>保存対象は変換データ、行の確認状態・タグ、使用中の様式プロファイル、監査履歴です。</li>
+        <li>ブラウザを閉じた後は「作業復旧」で再開できます。</li>
+        <li>「復旧データ削除」は保存済み復旧データを消去します。</li>
+      </ul>
+      <div class="ws-note">空白値の区別: <code>"UNKNOWN"</code>は確認不能を示す文字列、<code>null</code>は値なし、空文字は入力欄が空、キー未定義は項目自体を出力しない状態です。</div>
+      <p><button class="ws-btn primary" type="button" data-ws-action="restore">作業復旧</button></p>` }
+  ];
+  let manualActiveSection = 'basic';
+  function renderManualBody() {
+    const nav = WS_MANUAL_SECTIONS.map(s => `<button type="button" class="ws-btn${s.id===manualActiveSection?' primary':''}" data-ws-manual-section="${s.id}">${escapeHtml(s.label)}</button>`).join('');
+    const sections = WS_MANUAL_SECTIONS.map(s => `<section class="ws-guide-section${s.id===manualActiveSection?' active':''}"><h3>${escapeHtml(s.title)}</h3>${s.body}</section>`).join('');
+    return `<div class="ws-manual-body"><nav class="ws-manual-nav" aria-label="使い方の項目">${nav}</nav><div class="ws-manual-content">${sections}</div></div>`;
+  }
+  function wireManualNav() {
+    $('workspaceModalBody').querySelectorAll('[data-ws-manual-section]').forEach(btn => {
+      btn.addEventListener('click', () => { manualActiveSection = btn.dataset.wsManualSection; $('workspaceModalBody').innerHTML = renderManualBody(); wireManualNav(); });
+    });
+  }
   function showWorkspaceHelp() {
-    openWorkspaceModal('Excel → JSON 変換・確認ツールの使い方',`<div class="ws-note"><b>基本フロー</b><br>1. Excelを開き、シートと変換範囲を選択します。<br>2. 結合セル展開・空白補完・UNKNOWN／nullの方針を設定して変換します。<br>3. 表形式で内容を修正し、各行を「確認済み」「要修正」「除外」に分類してタグを付けます。<br>4. 検証結果でエラー0を確認します。<br>5. 確認済みJSONまたは照合用JSONを出力します。</div><h3>出力の違い</h3><p><b>作業中JSON</b>：編集状態、行UID、確認履歴を含み、後日作業を再開できます。</p><p><b>確認済みJSON</b>：未確認・要修正・未登録タグがない場合だけ出力できます。</p><p><b>照合用JSON</b>：後段照合ツール向けschema 1.1。安定IDとcontent_hashを含みます。</p><h3>空白値の区別</h3><p><code>"UNKNOWN"</code>は確認不能を示す文字列、<code>null</code>は値なし、空文字は入力欄が空、キー未定義は項目自体を出力しない状態です。</p>`,[{label:'閉じる',className:'primary',onClick:closeWorkspaceModal}]);
+    manualActiveSection = 'basic';
+    openWorkspaceModal('Excel → JSON 変換・確認ツールの使い方', renderManualBody(), [{label:'閉じる',className:'primary',onClick:closeWorkspaceModal}]);
+    wireManualNav();
   }
 
   workspaceProfileSelect.addEventListener('change',()=>{profileSelect.value=workspaceProfileSelect.value;loadProfileIntoEditor(Number(workspaceProfileSelect.value));});
@@ -3674,14 +3764,25 @@ I/F = インターフェース"></textarea>
   $('workspaceHelpBtn').addEventListener('click',showWorkspaceHelp);
   $('workspaceProfileAiGuideBtn').addEventListener('click',showAiProfileGuide);
   $('workspaceModalClose').addEventListener('click',closeWorkspaceModal); $('workspaceModalBackdrop').addEventListener('click',e=>{if(e.target.id==='workspaceModalBackdrop')closeWorkspaceModal();});
-  document.querySelectorAll('[data-ws-tab]').forEach(btn=>btn.addEventListener('click',()=>switchTab(btn.dataset.wsTab)));
-  document.querySelectorAll('[data-ws-action="open"]').forEach(btn=>btn.addEventListener('click',()=>excelFile.click()));
-  document.querySelectorAll('[data-ws-action="validate"]').forEach(btn=>btn.addEventListener('click',()=>currentData.length?showValidationModal():excelFile.click()));
-  document.querySelectorAll('[data-ws-action="open-work"]').forEach(btn=>btn.addEventListener('click',()=>$('workJsonInput').click()));
-  document.querySelectorAll('[data-ws-action="help"]').forEach(btn=>btn.addEventListener('click',showWorkspaceHelp));
-  document.querySelectorAll('[data-ws-action="ai-profile"]').forEach(btn=>btn.addEventListener('click',showAiProfileGuide));
-  document.querySelectorAll('[data-ws-action="bulk-review"]').forEach(btn=>btn.addEventListener('click',()=>currentData.length?openBulkReviewModal():excelFile.click()));
-  document.querySelectorAll('[data-ws-action="trace-export"]').forEach(btn=>btn.addEventListener('click',()=>currentData.length?exportTraceJsonV20():excelFile.click()));
+  function runWsAction(name) {
+    switch (name) {
+      case 'open': excelFile.click(); break;
+      case 'open-work': $('workJsonInput').click(); break;
+      case 'validate': currentData.length ? showValidationModal() : excelFile.click(); break;
+      case 'help': showWorkspaceHelp(); break;
+      case 'ai-profile': showAiProfileGuide(); break;
+      case 'bulk-review': currentData.length ? openBulkReviewModal() : excelFile.click(); break;
+      case 'trace-export': currentData.length ? exportTraceJsonV20() : excelFile.click(); break;
+      case 'paste-profile': openProfilePasteModal(); break;
+      case 'restore': restoreWorkspaceAutosave(); break;
+    }
+  }
+  document.addEventListener('click', event => {
+    const actionBtn = event.target.closest('[data-ws-action]');
+    if (actionBtn) { runWsAction(actionBtn.dataset.wsAction); if (actionBtn.closest('#workspaceModalBody')) closeWorkspaceModal(); }
+    const tabBtn = event.target.closest('[data-ws-tab]');
+    if (tabBtn) { switchTab(tabBtn.dataset.wsTab); if (tabBtn.closest('#workspaceModalBody')) closeWorkspaceModal(); }
+  });
   function syncHeaderHeight(){ const h=document.querySelector('.ws-header'); if(h) document.documentElement.style.setProperty('--ws-header-height',Math.ceil(h.getBoundingClientRect().height)+'px'); }
   syncHeaderHeight(); window.addEventListener('resize',syncHeaderHeight,{passive:true}); setTimeout(syncHeaderHeight,80);
   window.addEventListener('beforeunload',event=>{if(workspaceDirty){event.preventDefault();event.returnValue='';}});
