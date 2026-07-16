@@ -3,29 +3,32 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Excel → JSON 変換・確認ツール v2.0.4</title>
+  <title>Excel → JSON 変換・確認ツール v2.0.5</title>
   <style>
     :root {
-      --bg: #f7f9fc;
+      --bg: #e8e6e1;
       --panel: #ffffff;
-      --border: #dbe3ee;
-      --text: #1f2937;
-      --muted: #64748b;
-      --primary: #2563eb;
-      --primary-dark: #1d4ed8;
-      --danger: #dc2626;
-      --success: #16a34a;
-      --warning: #ea580c;
-      --info-bg: #eff6ff;
-      --error-bg: #fef2f2;
+      --border: #c9c5bd;
+      --text: #1a1a1a;
+      --muted: #59677a;
+      --primary: #22436b;
+      --primary-dark: #183253;
+      --danger: #b93a2b;
+      --success: #287747;
+      --warning: #a66500;
+      --info-bg: #eef2f7;
+      --error-bg: #fbeeec;
       --warn-bg: #fff7ed;
-      --shadow: 0 2px 12px rgba(0,0,0,0.05);
+      --shadow: 0 2px 10px rgba(0,0,0,0.07);
+      --gothic: "Hiragino Kaku Gothic ProN","Yu Gothic","Noto Sans JP","Meiryo",sans-serif;
+      --mincho: "Yu Mincho","YuMincho","Hiragino Mincho ProN","Noto Serif JP","MS Mincho",serif;
+      --mono: "Consolas","Menlo",monospace;
     }
 
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: var(--gothic);
       background: var(--bg);
       color: var(--text);
     }
@@ -36,10 +39,12 @@
 
     .lead { margin: 0 0 14px; color: var(--muted); }
     .info, .error, .warn {
-      padding: 10px 12px;
-      border-radius: 8px;
+      padding: 8px 10px;
+      border-radius: 3px;
       margin-bottom: 14px;
       border-left: 4px solid;
+      font-size: 12px;
+      line-height: 1.6;
     }
     .info  { background: var(--info-bg); border-color: var(--primary); }
     .error { background: var(--error-bg); border-color: var(--danger); color: #991b1b; }
@@ -47,23 +52,24 @@
 
     .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
     .tab-btn {
-      border: 2px solid var(--primary);
+      border: 1px solid var(--primary);
       background: #fff;
       color: var(--primary);
-      padding: 10px 18px;
-      border-radius: 10px;
+      padding: 7px 14px;
+      border-radius: 5px;
       cursor: pointer;
       font-weight: 700;
+      font-size: 13px;
       transition: background 0.15s, color 0.15s;
     }
-    .tab-btn:hover { background: #dbeafe; }
+    .tab-btn:hover { background: #efede8; }
     .tab-btn.active { background: var(--primary); color: #fff; }
 
     .tab-panel {
       display: none;
       background: var(--panel);
       border: 1px solid var(--border);
-      border-radius: 14px;
+      border-radius: 7px;
       padding: 16px;
       box-shadow: var(--shadow);
       margin-bottom: 18px;
@@ -79,27 +85,29 @@
     .card {
       background: #fafcff;
       border: 1px solid var(--border);
-      border-radius: 12px;
+      border-radius: 6px;
       padding: 12px;
     }
     .muted-box {
       background: #f8fafc;
-      border: 1px dashed #cbd5e1;
+      border: 1px dashed var(--border);
       padding: 12px;
-      border-radius: 12px;
+      border-radius: 6px;
     }
 
     label { display: block; font-weight: 700; margin-bottom: 6px; }
     input[type="file"], input[type="text"], input[type="number"], select, textarea {
       width: 100%;
-      border: 1px solid #cbd5e1;
-      border-radius: 8px;
-      padding: 10px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 8px 10px;
       background: #fff;
       font: inherit;
+      font-family: var(--gothic);
     }
     input:focus, select:focus, textarea:focus {
-      outline: 2px solid #bfdbfe;
+      outline: 2px solid var(--primary);
+      outline-offset: 1px;
       border-color: var(--primary);
     }
 
@@ -120,22 +128,24 @@
 
     .actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 12px 0 14px; }
     button {
-      border: none;
-      border-radius: 8px;
+      border: 1px solid var(--primary);
+      border-radius: 4px;
       background: var(--primary);
       color: white;
-      padding: 10px 14px;
+      padding: 7px 14px;
       cursor: pointer;
       font-weight: 700;
+      font-family: var(--gothic);
+      transition: background 0.15s, border-color 0.15s;
     }
-    button:hover { background: var(--primary-dark); }
-    button.secondary { background: #475569; }
-    button.secondary:hover { background: #334155; }
-    button.success { background: var(--success); }
-    button.success:hover { background: #15803d; }
-    button.warning { background: var(--warning); }
-    button.warning:hover { background: #c2410c; }
-    button:disabled { background: #94a3b8; cursor: not-allowed; }
+    button:hover { background: var(--primary-dark); border-color: var(--primary-dark); }
+    button.secondary { background: #fff; color: var(--text); border-color: var(--border); }
+    button.secondary:hover { background: #efede8; }
+    button.success { background: var(--success); border-color: var(--success); }
+    button.success:hover { background: #1f5c37; border-color: #1f5c37; }
+    button.warning { background: var(--warning); border-color: var(--warning); }
+    button.warning:hover { background: #7a4d00; border-color: #7a4d00; }
+    button:disabled { background: #94a3b8; border-color: #94a3b8; cursor: not-allowed; }
 
     .small { font-size: 12px; color: var(--muted); margin-top: 6px; }
     .status-row {
@@ -149,19 +159,20 @@
       display: inline-flex;
       align-items: center;
       border-radius: 999px;
-      background: #e2e8f0;
+      background: #e3e8ef;
+      color: var(--primary);
       padding: 4px 10px;
       font-size: 12px;
       font-weight: 700;
     }
-    .badge.editing { background: #f59e0b; color: #fff; }
+    .badge.editing { background: var(--warning); color: #fff; }
 
     .preview {
       white-space: pre;
       background: #0f172a;
       color: #e2e8f0;
       padding: 14px;
-      border-radius: 12px;
+      border-radius: 6px;
       max-height: 560px;
       overflow: auto;
       font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -172,7 +183,7 @@
       overflow: auto;
       max-height: 620px;
       border: 1px solid var(--border);
-      border-radius: 12px;
+      border-radius: 6px;
     }
     table { width: 100%; border-collapse: collapse; background: #fff; min-width: 900px; }
     th, td {
@@ -185,9 +196,9 @@
       max-width: 420px;
       overflow-wrap: anywhere;
     }
-    th { position: sticky; top: 0; background: #eff6ff; z-index: 2; }
+    th { position: sticky; top: 0; background: #eef2f7; z-index: 2; }
     th:first-child, td:first-child { position: sticky; left: 0; z-index: 1; background: #f8fafc; }
-    th:first-child { z-index: 3; background: #dbeafe; }
+    th:first-child { z-index: 3; background: #e3e8ef; }
     .edit-mode td[data-key] { cursor: cell; }
     .edit-mode td[data-key]:hover,
     .edit-mode th[data-key]:hover { background: #fef9c3; outline: 1px solid #fbbf24; }
@@ -405,7 +416,7 @@
   .app-v20 .tab-panel{border-radius:8px;border-color:var(--ws-line);box-shadow:0 2px 10px rgba(0,0,0,.07);}
   .review-column-head{min-width:285px;position:sticky;left:42px;z-index:3;background:#e8edf4!important;}.row-review-cell{min-width:285px;background:#f8fafc;position:sticky;left:42px;z-index:1;border-right:2px solid #cbd5e1;}.row-review-wrap{display:grid;gap:5px;}.row-review-top{display:flex;gap:5px;align-items:center;flex-wrap:wrap;}.row-review-select,.row-review-reason,.row-tag-input{border:1px solid #bac5d2;border-radius:4px;padding:4px 6px;font:inherit;background:#fff;}.row-review-select{max-width:110px;}.row-review-reason{width:100%;font-size:11px;}.row-tag-entry{display:flex;gap:4px;}.row-tag-input{min-width:110px;flex:1;font-size:11px;}.row-tag-add{border:1px solid #b9c9dd;background:#e2eaf5;color:#29496f;border-radius:4px;padding:3px 6px;font-size:10px;cursor:pointer;}.row-tag-chips{display:flex;gap:3px;flex-wrap:wrap;}.row-tag-chip{display:inline-flex;gap:2px;align-items:center;border:1px solid #b9c9dd;background:#e2eaf5;color:#29496f;border-radius:999px;padding:1px 5px;font-size:10px;}.row-tag-chip.unregistered{background:#fde9e7;border-color:#e1a39d;color:#a62c21;}.row-tag-chip button{border:0;background:transparent;color:#8b2e27;padding:0;cursor:pointer;font-size:10px;}.review-state-reviewed{border-left:4px solid #23693b!important;background:#e7f5eb!important}.review-state-needs_fix{border-left:4px solid #925800!important;background:#fff2df!important}.review-state-excluded{border-left:4px solid #536174!important;background:#edf0f3!important;opacity:.8}.review-state-unreviewed{border-left:4px solid #b42318!important;background:#fde2e2!important}.row-review-select{font-weight:700;transition:background-color .15s,border-color .15s;}.review-state-unreviewed .row-review-select{background:#f6b3ae!important;border-color:#b42318!important;color:#7a170f;}.review-state-reviewed .row-review-select{background:#addcb8!important;border-color:#23693b!important;color:#123f22;}.review-state-needs_fix .row-review-select{background:#fbd196!important;border-color:#925800!important;color:#5c3700;}.review-state-excluded .row-review-select{background:#c9d1db!important;border-color:#536174!important;color:#33404c;}.row-review-select option[value="unreviewed"]{background:#fde2e2;color:#7a170f;}.row-review-select option[value="reviewed"]{background:#e7f5eb;color:#123f22;}.row-review-select option[value="needs_fix"]{background:#fff2df;color:#5c3700;}.row-review-select option[value="excluded"]{background:#edf0f3;color:#33404c;}
   .tag-alias-editor{width:100%;min-height:82px;border:1px solid #cbd5e1;border-radius:6px;padding:8px;font:12px/1.5 ui-monospace,monospace;resize:vertical;}
-  .ws-modal-backdrop{position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.42);display:flex;align-items:center;justify-content:center;padding:18px;}.ws-modal-backdrop[hidden]{display:none;}.ws-modal{width:min(980px,100%);max-height:88vh;overflow:auto;background:#fff;border:1px solid #b9c3cf;border-radius:9px;box-shadow:0 18px 50px rgba(0,0,0,.32);}.ws-modal>header{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:8px;background:#eef2f7;border-bottom:1px solid #c7d0dc;padding:10px 14px;}.ws-modal>header h2{margin:0;color:var(--ws-indigo);font-size:16px;}.ws-modal>header button{margin-left:auto;border:0;background:transparent;font-size:22px;cursor:pointer;color:#526174;}.ws-modal-body{padding:14px;}.ws-modal-actions{position:sticky;bottom:0;display:flex;gap:8px;justify-content:flex-end;align-items:center;flex-wrap:wrap;background:#f8fafc;border-top:1px solid #d6dde6;padding:10px 14px;}.ws-modal-actions button{border:1px solid var(--ws-line);background:#fff;color:#334155;border-radius:4px;padding:7px 12px;font-weight:700;cursor:pointer;}.ws-modal-actions button.primary{background:var(--ws-indigo);border-color:var(--ws-indigo);color:#fff;}.ws-modal-actions button.success{background:var(--ws-green);border-color:var(--ws-green);color:#fff;}.ws-form-grid{display:grid;grid-template-columns:repeat(2,minmax(220px,1fr));gap:10px;}.ws-form-grid label{display:grid;gap:4px;font-size:12px;font-weight:700;color:#465569;}.ws-form-grid input,.ws-form-grid textarea,.ws-form-grid select{width:100%;border:1px solid #bcc6d2;border-radius:5px;padding:7px;font:inherit;background:#fff;}.ws-form-grid textarea{min-height:80px;resize:vertical;}.ws-json-editor{width:100%;min-height:380px;border:1px solid #bcc6d2;border-radius:5px;padding:10px;font:12px/1.55 ui-monospace,monospace;white-space:pre;resize:vertical;}.ws-json-pre{margin:0;background:#111827;color:#e5e7eb;border-radius:6px;padding:14px;max-height:65vh;overflow:auto;font:12px/1.55 ui-monospace,monospace;white-space:pre;}.ws-validation-list{display:grid;gap:5px;max-height:55vh;overflow:auto;}.ws-validation-item{display:grid;grid-template-columns:70px minmax(120px,240px) 1fr;gap:7px;padding:6px 8px;border:1px solid #dce2e9;border-radius:5px;font-size:12px;}.ws-validation-item.error{background:#fef2f2;color:#991b1b}.ws-validation-item.warning{background:#fff7ed;color:#9a3412}.ws-validation-item.info{background:#eff6ff;color:#1e40af}.ws-bulk-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:12px;}.ws-bulk-card{border:1px solid #cfd7e2;border-radius:7px;background:#f8fafc;padding:9px 10px;}.ws-bulk-card strong{display:block;font-size:20px;color:var(--ws-indigo);}.ws-note{font-size:12px;line-height:1.65;color:#59677a;background:#f6f7f9;border-left:4px solid var(--ws-indigo);padding:8px 10px;margin:8px 0;}
+  .ws-modal-backdrop{position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;padding:18px;}.ws-modal-backdrop[hidden]{display:none;}.ws-modal{width:min(980px,100%);max-height:88vh;overflow:auto;background:#fff;border:1px solid var(--ws-line);border-radius:8px;box-shadow:0 12px 40px rgba(0,0,0,.28);}.ws-modal>header{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:8px;background:var(--ws-chrome);border-bottom:1px solid var(--ws-line);padding:12px 16px;}.ws-modal>header h2{margin:0;color:var(--ws-indigo);font-size:17px;font-family:"Yu Mincho","Hiragino Mincho ProN",serif;letter-spacing:.08em;}.ws-modal>header button{margin-left:auto;border:0;background:transparent;font-size:22px;cursor:pointer;color:#526174;}.ws-modal-body{padding:14px;}.ws-modal-actions{position:sticky;bottom:0;display:flex;gap:8px;justify-content:flex-end;align-items:center;flex-wrap:wrap;background:#f8fafc;border-top:1px solid #d6dde6;padding:10px 14px;}.ws-modal-actions button{border:1px solid var(--ws-line);background:#fff;color:#334155;border-radius:4px;padding:7px 12px;font-weight:700;cursor:pointer;}.ws-modal-actions button.primary{background:var(--ws-indigo);border-color:var(--ws-indigo);color:#fff;}.ws-modal-actions button.success{background:var(--ws-green);border-color:var(--ws-green);color:#fff;}.ws-form-grid{display:grid;grid-template-columns:repeat(2,minmax(220px,1fr));gap:10px;}.ws-form-grid label{display:grid;gap:4px;font-size:12px;font-weight:700;color:#465569;}.ws-form-grid input,.ws-form-grid textarea,.ws-form-grid select{width:100%;border:1px solid #bcc6d2;border-radius:5px;padding:7px;font:inherit;background:#fff;}.ws-form-grid textarea{min-height:80px;resize:vertical;}.ws-json-editor{width:100%;min-height:380px;border:1px solid #bcc6d2;border-radius:5px;padding:10px;font:12px/1.55 ui-monospace,monospace;white-space:pre;resize:vertical;}.ws-json-pre{margin:0;background:#111827;color:#e5e7eb;border-radius:6px;padding:14px;max-height:65vh;overflow:auto;font:12px/1.55 ui-monospace,monospace;white-space:pre;}.ws-validation-list{display:grid;gap:5px;max-height:55vh;overflow:auto;}.ws-validation-item{display:grid;grid-template-columns:70px minmax(120px,240px) 1fr;gap:7px;padding:6px 8px;border:1px solid #dce2e9;border-radius:5px;font-size:12px;}.ws-validation-item.error{background:#fef2f2;color:#991b1b}.ws-validation-item.warning{background:#fff7ed;color:#9a3412}.ws-validation-item.info{background:#eff6ff;color:#1e40af}.ws-bulk-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:12px;}.ws-bulk-card{border:1px solid #cfd7e2;border-radius:7px;background:#f8fafc;padding:9px 10px;}.ws-bulk-card strong{display:block;font-size:20px;color:var(--ws-indigo);}.ws-note{font-size:12px;line-height:1.65;color:#59677a;background:#f6f7f9;border-left:4px solid var(--ws-indigo);padding:8px 10px;margin:8px 0;}
   .app-v20 .tabs{position:relative;top:auto;}
   @media(max-width:900px){.ws-form-grid{grid-template-columns:1fr}.review-column-head,.row-review-cell{position:static}.ws-brand-row,.ws-primary-row,.ws-support-row{align-items:stretch}.ws-current-profile{width:100%}}
 
@@ -414,7 +425,7 @@
 <body class="app-v20">
 <header class="ws-header" aria-label="Excel JSONツールバー">
   <div class="ws-brand-row">
-    <div class="ws-brand">Excel → JSON 変換・確認 <small>v2.0.4</small></div>
+    <div class="ws-brand">Excel → JSON 変換・確認 <small>v2.0.5</small></div>
     <span class="ws-purpose">Excel／CSV行データを人が確認・タグ付けし、後段照合に使えるJSONへ仕上げるツール</span>
     <span class="ws-spacer"></span>
     <button id="workspaceHelpBtn" class="ws-btn" type="button">使い方</button>
@@ -511,9 +522,7 @@
 </div>
 
 <div class="container">
-  <h1>Excel → JSON 変換・確認ツール v2.0.4</h1>
-  <div class="small" style="margin:-8px 0 12px;">v2.0.4: ヘッダーをブランド行・主要操作行・補助操作行に整理し、工程バーの操作ボタンを別行に分離。「目的から操作を開始する」カードに実際の操作ボタンを追加し、仕様書PDF→JSONツールに近いUI構成へ変更</div>
-  <p class="lead">Excel / CSVの表を読み込み、表上で変換範囲を選択し、結合セル展開・空白補完・UNKNOWN付与・JSON null識別を行いながらJSON編集、様式適用、照合タグ付与までをブラウザ内で実行します。</p>
+  <div class="small" style="margin:0 0 12px;">v2.0.5: 配色・タイポグラフィ・ボタン/バッジ/カード/モーダルのデザイントークンを仕様書PDF→JSONツールと統一（v2.0.4: ヘッダー・工程バー・目的別カードのレイアウトを整理）</div>
 
   <div class="info">
     Excel読込後のプレビュー表をドラッグすると、変換する行・列の範囲を設定できます。選択範囲の先頭行がヘッダー、次の行からがデータになります。
@@ -1919,7 +1928,7 @@ I/F = インターフェース"></textarea>
       trace_format: 'excel-row-trace-v1',
       schema_version: '1.0',
       generated_at: new Date().toISOString(),
-      generator: { name: 'Excel → JSON 変換・確認ツール', version: '2.0.4' },
+      generator: { name: 'Excel → JSON 変換・確認ツール', version: '2.0.5' },
       source: { file_name: fileName, sheet_name: sheet, profile_name: profile.profile_name, profile_version: profile.profile_version || '1.0' },
       tag_policy: {
         mode: profile.tag_policy?.mode || 'controlled', vocabulary_id: profile.tag_policy?.vocabulary_id || 'excel-row-tags',
@@ -3500,7 +3509,7 @@ I/F = インターフェース"></textarea>
   const v20BaseBuildTraceOutput=buildTraceOutput;
   buildTraceOutput=function(records,profile){
     ensureRowStates(); const result=v20BaseBuildTraceOutput(records,profile);
-    result.schema_version='1.1'; result.id_scheme=V20_ID_SCHEME; result.generator.version='2.0.4';
+    result.schema_version='1.1'; result.id_scheme=V20_ID_SCHEME; result.generator.version='2.0.5';
     result.tag_policy.tag_aliases=normalizeAliasMap(profile?.tag_policy?.tag_aliases);
     result._trace_records.forEach((record,index)=>{
       const state=currentCellMeta[index]?.__row_state;
