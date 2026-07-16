@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Excel → JSON 変換・確認ツール v2.0.3</title>
+  <title>Excel → JSON 変換・確認ツール v2.0.4</title>
   <style>
     :root {
       --bg: #f7f9fc;
@@ -371,9 +371,15 @@
   .app-v20 .container{max-width:1500px;padding-top:14px;}
   .app-v20 .container>h1,.app-v20 .container>.lead{display:none;}
   .ws-header{position:sticky;top:0;z-index:90;background:var(--ws-chrome);border-bottom:1px solid var(--ws-line);box-shadow:0 1px 5px rgba(0,0,0,.08);}
-  .ws-header-main{min-height:50px;padding:8px 16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .ws-brand-row,.ws-primary-row,.ws-support-row{display:flex;align-items:center;gap:8px;padding:6px 16px;flex-wrap:wrap;}
+  .ws-brand-row{min-height:37px;background:var(--ws-paper);border-bottom:1px solid var(--ws-line);}
+  .ws-primary-row{min-height:37px;background:#eef2f7;border-bottom:1px solid #d6dee8;}
+  .ws-support-row{min-height:30px;background:var(--ws-chrome);}
   .ws-brand{font-family:"Yu Mincho","Hiragino Mincho ProN",serif;color:var(--ws-indigo);font-weight:800;letter-spacing:.1em;padding-right:12px;border-right:1px solid var(--ws-line);white-space:nowrap;}
   .ws-brand small{font-family:system-ui,sans-serif;letter-spacing:0;color:#667085;font-size:10px;}
+  .ws-purpose{font-size:11.5px;color:#59677a;line-height:1.4;}
+  .ws-group-label{font-size:10px;font-weight:800;color:#526176;padding:0 2px;white-space:nowrap;}
+  .ws-divider{width:1px;height:22px;background:#cbd3dc;margin:0 2px;}
   .ws-current-profile{display:flex;align-items:center;gap:5px;min-width:235px;}
   .ws-current-profile label{font-size:11px;color:#586474;font-weight:700;white-space:nowrap;margin:0;}
   .ws-current-profile select{min-width:175px;max-width:260px;padding:6px 8px;border:1px solid var(--ws-line);border-radius:4px;background:#fff;}
@@ -381,52 +387,57 @@
   .ws-btn:hover,.ws-mini-btn:hover{background:#efede8;}.ws-btn:disabled,.ws-mini-btn:disabled{opacity:.45;cursor:not-allowed;}
   .ws-btn.primary{background:var(--ws-indigo);border-color:var(--ws-indigo);color:#fff;}.ws-btn.success,.ws-mini-btn.success{background:var(--ws-green);border-color:var(--ws-green);color:#fff;}.ws-mini-btn.warning{background:#a66500;border-color:#a66500;color:#fff;}
   .ws-spacer{flex:1;}
-  .ws-menu{position:relative;}.ws-menu summary{list-style:none;border:1px solid var(--ws-line);border-radius:4px;background:#fff;padding:7px 11px;font-size:12px;font-weight:700;cursor:pointer;}.ws-menu summary::-webkit-details-marker{display:none;}
-  .ws-menu-panel{position:absolute;right:0;top:calc(100% + 5px);z-index:110;width:210px;padding:6px;background:#fff;border:1px solid var(--ws-line);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,.18);display:grid;gap:3px;}
-  .ws-menu-panel button{border:0;background:#fff;text-align:left;color:#334155;padding:8px 9px;border-radius:4px;cursor:pointer;font-size:12px;}.ws-menu-panel button:hover{background:#eef2f7;}
-  .ws-workflow{position:sticky;top:50px;z-index:80;background:#eef2f7;border-bottom:1px solid #b9c4d2;padding:7px 16px;display:flex;gap:9px;align-items:center;flex-wrap:wrap;box-shadow:0 1px 5px rgba(0,0,0,.06);font-size:12px;}
+  .ws-workflow{position:sticky;top:var(--ws-header-height,124px);z-index:80;background:#eef2f7;border-bottom:1px solid #b9c4d2;padding:7px 16px;display:flex;gap:9px;align-items:center;flex-wrap:wrap;box-shadow:0 1px 5px rgba(0,0,0,.06);font-size:12px;}
   .ws-mode{display:flex;align-items:center;gap:5px;color:var(--ws-indigo);}.ws-mode-pill{padding:3px 8px;border-radius:999px;background:#d7e4f4;color:var(--ws-indigo);font-weight:700;}
   .ws-steps{display:flex;gap:4px;align-items:center;color:#697586;}.ws-step{padding:3px 7px;border-radius:999px;background:#dce3ec;color:#4d5b6d;font-weight:700;white-space:nowrap;}.ws-step.active{background:var(--ws-indigo);color:#fff;}
-  .ws-actions{display:flex;gap:4px;align-items:center;flex-wrap:wrap;}.ws-mini-btn{padding:5px 8px;font-size:11px;}
+  .ws-actions{display:flex;gap:4px;align-items:center;flex-wrap:wrap;width:100%;padding-top:6px;margin-top:2px;border-top:1px solid #c9d2dd;}.ws-mini-btn{padding:5px 8px;font-size:11px;}
   .ws-save-state{padding:3px 7px;border-radius:999px;background:#fff;border:1px solid #c7d0dc;color:#536174;white-space:nowrap;}.ws-save-state.dirty{background:#fff4d8;color:#8b5700;border-color:#e4c16d;}.ws-save-state.error{background:#fde9e7;color:#a62c21;border-color:#e1a39d;}
   .ws-review-summary{display:flex;gap:5px;align-items:center;flex-wrap:wrap;width:100%;}.ws-review-summary span{padding:2px 7px;border-radius:999px;background:#fff;border:1px solid #c8d1dc;white-space:nowrap;}.ws-review-summary .reviewed{background:#e7f5eb;color:#23693b}.ws-review-summary .needs-fix{background:#fff2df;color:#925800}.ws-review-summary .excluded{background:#edf0f3;color:#536174}.ws-review-summary .unregistered{background:#fde9e7;color:#a62c21;}
   .ws-responsibility{width:100%;font-size:11px;color:#59677a;padding-top:3px;border-top:1px solid #cad3dd;}
-  .ws-start-nav{max-width:1500px;margin:12px auto 0;padding:0 20px;}.ws-start-nav>summary{cursor:pointer;font-weight:800;color:var(--ws-indigo);font-size:13px;}.ws-usecase-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px;margin-top:8px;}.ws-usecase-grid button{display:grid;gap:3px;text-align:left;border:1px solid #ccd4de;background:#fff;border-radius:7px;padding:10px 12px;cursor:pointer;color:#334155;}.ws-usecase-grid button:hover{border-color:var(--ws-indigo);background:#f7f9fc;}.ws-usecase-grid b{color:var(--ws-indigo);}.ws-usecase-grid span{font-size:11px;color:#667085;}
+  .ws-start-nav{max-width:1500px;margin:12px auto 0;padding:0 20px;}.ws-start-nav>summary{cursor:pointer;font-weight:800;color:var(--ws-indigo);font-size:13px;}
+  .ws-usecase-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px;margin-top:8px;}
+  .ws-usecase{display:flex;flex-direction:column;gap:6px;border:1px solid #ccd4de;background:#fff;border-radius:7px;padding:10px 12px;min-height:112px;}
+  .ws-usecase h3{margin:0;color:var(--ws-indigo);font-size:12.5px;}
+  .ws-usecase p{margin:0;color:#667085;font-size:11px;line-height:1.5;flex:1;}
+  .ws-usecase-actions{display:flex;gap:5px;flex-wrap:wrap;}
+  .ws-usecase-actions .ws-btn{padding:5px 9px;font-size:11px;}
   .app-v20 .tabs{position:sticky;top:154px;z-index:70;background:var(--ws-desk);padding:7px 0;margin-bottom:8px;}.app-v20 .tab-btn{border-radius:5px;border-color:var(--ws-indigo);color:var(--ws-indigo);}.app-v20 .tab-btn.active,.app-v20 .tab-btn.active:hover,.app-v20 .tab-btn.active:focus-visible{background:var(--ws-indigo);color:#fff;-webkit-text-fill-color:#fff;}
   .app-v20 .tab-panel{border-radius:8px;border-color:var(--ws-line);box-shadow:0 2px 10px rgba(0,0,0,.07);}
   .review-column-head{min-width:285px;position:sticky;left:42px;z-index:3;background:#e8edf4!important;}.row-review-cell{min-width:285px;background:#f8fafc;position:sticky;left:42px;z-index:1;border-right:2px solid #cbd5e1;}.row-review-wrap{display:grid;gap:5px;}.row-review-top{display:flex;gap:5px;align-items:center;flex-wrap:wrap;}.row-review-select,.row-review-reason,.row-tag-input{border:1px solid #bac5d2;border-radius:4px;padding:4px 6px;font:inherit;background:#fff;}.row-review-select{max-width:110px;}.row-review-reason{width:100%;font-size:11px;}.row-tag-entry{display:flex;gap:4px;}.row-tag-input{min-width:110px;flex:1;font-size:11px;}.row-tag-add{border:1px solid #b9c9dd;background:#e2eaf5;color:#29496f;border-radius:4px;padding:3px 6px;font-size:10px;cursor:pointer;}.row-tag-chips{display:flex;gap:3px;flex-wrap:wrap;}.row-tag-chip{display:inline-flex;gap:2px;align-items:center;border:1px solid #b9c9dd;background:#e2eaf5;color:#29496f;border-radius:999px;padding:1px 5px;font-size:10px;}.row-tag-chip.unregistered{background:#fde9e7;border-color:#e1a39d;color:#a62c21;}.row-tag-chip button{border:0;background:transparent;color:#8b2e27;padding:0;cursor:pointer;font-size:10px;}.review-state-reviewed{border-left:4px solid #23693b!important;background:#e7f5eb!important}.review-state-needs_fix{border-left:4px solid #925800!important;background:#fff2df!important}.review-state-excluded{border-left:4px solid #536174!important;background:#edf0f3!important;opacity:.8}.review-state-unreviewed{border-left:4px solid #b42318!important;background:#fde2e2!important}.row-review-select{font-weight:700;transition:background-color .15s,border-color .15s;}.review-state-unreviewed .row-review-select{background:#f6b3ae!important;border-color:#b42318!important;color:#7a170f;}.review-state-reviewed .row-review-select{background:#addcb8!important;border-color:#23693b!important;color:#123f22;}.review-state-needs_fix .row-review-select{background:#fbd196!important;border-color:#925800!important;color:#5c3700;}.review-state-excluded .row-review-select{background:#c9d1db!important;border-color:#536174!important;color:#33404c;}.row-review-select option[value="unreviewed"]{background:#fde2e2;color:#7a170f;}.row-review-select option[value="reviewed"]{background:#e7f5eb;color:#123f22;}.row-review-select option[value="needs_fix"]{background:#fff2df;color:#5c3700;}.row-review-select option[value="excluded"]{background:#edf0f3;color:#33404c;}
   .tag-alias-editor{width:100%;min-height:82px;border:1px solid #cbd5e1;border-radius:6px;padding:8px;font:12px/1.5 ui-monospace,monospace;resize:vertical;}
   .ws-modal-backdrop{position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.42);display:flex;align-items:center;justify-content:center;padding:18px;}.ws-modal-backdrop[hidden]{display:none;}.ws-modal{width:min(980px,100%);max-height:88vh;overflow:auto;background:#fff;border:1px solid #b9c3cf;border-radius:9px;box-shadow:0 18px 50px rgba(0,0,0,.32);}.ws-modal>header{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:8px;background:#eef2f7;border-bottom:1px solid #c7d0dc;padding:10px 14px;}.ws-modal>header h2{margin:0;color:var(--ws-indigo);font-size:16px;}.ws-modal>header button{margin-left:auto;border:0;background:transparent;font-size:22px;cursor:pointer;color:#526174;}.ws-modal-body{padding:14px;}.ws-modal-actions{position:sticky;bottom:0;display:flex;gap:8px;justify-content:flex-end;align-items:center;flex-wrap:wrap;background:#f8fafc;border-top:1px solid #d6dde6;padding:10px 14px;}.ws-modal-actions button{border:1px solid var(--ws-line);background:#fff;color:#334155;border-radius:4px;padding:7px 12px;font-weight:700;cursor:pointer;}.ws-modal-actions button.primary{background:var(--ws-indigo);border-color:var(--ws-indigo);color:#fff;}.ws-modal-actions button.success{background:var(--ws-green);border-color:var(--ws-green);color:#fff;}.ws-form-grid{display:grid;grid-template-columns:repeat(2,minmax(220px,1fr));gap:10px;}.ws-form-grid label{display:grid;gap:4px;font-size:12px;font-weight:700;color:#465569;}.ws-form-grid input,.ws-form-grid textarea,.ws-form-grid select{width:100%;border:1px solid #bcc6d2;border-radius:5px;padding:7px;font:inherit;background:#fff;}.ws-form-grid textarea{min-height:80px;resize:vertical;}.ws-json-editor{width:100%;min-height:380px;border:1px solid #bcc6d2;border-radius:5px;padding:10px;font:12px/1.55 ui-monospace,monospace;white-space:pre;resize:vertical;}.ws-json-pre{margin:0;background:#111827;color:#e5e7eb;border-radius:6px;padding:14px;max-height:65vh;overflow:auto;font:12px/1.55 ui-monospace,monospace;white-space:pre;}.ws-validation-list{display:grid;gap:5px;max-height:55vh;overflow:auto;}.ws-validation-item{display:grid;grid-template-columns:70px minmax(120px,240px) 1fr;gap:7px;padding:6px 8px;border:1px solid #dce2e9;border-radius:5px;font-size:12px;}.ws-validation-item.error{background:#fef2f2;color:#991b1b}.ws-validation-item.warning{background:#fff7ed;color:#9a3412}.ws-validation-item.info{background:#eff6ff;color:#1e40af}.ws-bulk-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:12px;}.ws-bulk-card{border:1px solid #cfd7e2;border-radius:7px;background:#f8fafc;padding:9px 10px;}.ws-bulk-card strong{display:block;font-size:20px;color:var(--ws-indigo);}.ws-note{font-size:12px;line-height:1.65;color:#59677a;background:#f6f7f9;border-left:4px solid var(--ws-indigo);padding:8px 10px;margin:8px 0;}
   .app-v20 .tabs{position:relative;top:auto;}
-  @media(max-width:900px){.ws-workflow{top:96px}.ws-form-grid{grid-template-columns:1fr}.review-column-head,.row-review-cell{position:static}.ws-header-main{align-items:stretch}.ws-current-profile{width:100%}}
+  @media(max-width:900px){.ws-form-grid{grid-template-columns:1fr}.review-column-head,.row-review-cell{position:static}.ws-brand-row,.ws-primary-row,.ws-support-row{align-items:stretch}.ws-current-profile{width:100%}}
 
 </style>
 </head>
 <body class="app-v20">
 <header class="ws-header" aria-label="Excel JSONツールバー">
-  <div class="ws-header-main">
-    <div class="ws-brand">Excel → JSON 変換・確認 <small>v2.0.3</small></div>
+  <div class="ws-brand-row">
+    <div class="ws-brand">Excel → JSON 変換・確認 <small>v2.0.4</small></div>
+    <span class="ws-purpose">Excel／CSV行データを人が確認・タグ付けし、後段照合に使えるJSONへ仕上げるツール</span>
+    <span class="ws-spacer"></span>
+    <button id="workspaceHelpBtn" class="ws-btn" type="button">使い方</button>
+    <button id="workspaceProfileAiGuideBtn" class="ws-btn" type="button">AIで様式作成</button>
+  </div>
+  <div class="ws-primary-row" aria-label="主要操作">
     <div class="ws-current-profile">
       <label for="workspaceProfileSelect">適用様式</label>
       <select id="workspaceProfileSelect" aria-label="現在のJSON様式"></select>
     </div>
     <button id="workspaceOpenExcelBtn" class="ws-btn primary" type="button">Excelを開く</button>
     <button id="workspaceOpenWorkBtn" class="ws-btn" type="button">作業中JSONを開く</button>
+    <span class="ws-divider"></span>
     <button id="workspaceJsonViewBtn" class="ws-btn" type="button" disabled>JSON表示</button>
     <button id="workspaceValidateBtn" class="ws-btn" type="button" disabled>検証結果</button>
     <button id="workspaceTraceExportBtn" class="ws-btn success" type="button" disabled>照合用JSON出力</button>
-    <details class="ws-menu">
-      <summary>様式・タグ</summary>
-      <div class="ws-menu-panel">
-        <button id="workspaceProfileImportBtn" type="button">様式ファイル登録</button>
-        <button id="workspaceProfilePasteBtn" type="button">JSON貼付登録</button>
-        <button id="workspaceProfileEditBtn" type="button">様式・タグ辞書編集</button>
-        <button id="workspaceProfileExportBtn" type="button">選択様式を出力</button>
-        <button id="workspaceProfileAiGuideBtn" type="button">AIで様式作成</button>
-      </div>
-    </details>
-    <span class="ws-spacer"></span>
-    <button id="workspaceHelpBtn" class="ws-btn" type="button">使い方</button>
+  </div>
+  <div class="ws-support-row" aria-label="補助操作">
+    <span class="ws-group-label">様式管理</span>
+    <button id="workspaceProfileImportBtn" class="ws-btn" type="button">様式ファイル登録</button>
+    <button id="workspaceProfilePasteBtn" class="ws-btn" type="button">JSON貼付登録</button>
+    <button id="workspaceProfileEditBtn" class="ws-btn" type="button">様式・タグ辞書編集</button>
+    <button id="workspaceProfileExportBtn" class="ws-btn" type="button">選択様式を出力</button>
   </div>
 </header>
 
@@ -460,11 +471,31 @@
 <details class="ws-start-nav" open>
   <summary>目的から操作を開始する</summary>
   <div class="ws-usecase-grid">
-    <button type="button" data-ws-action="open"><b>1. Excelを読み込む</b><span>シートと変換範囲を選択</span></button>
-    <button type="button" data-ws-tab="importTab"><b>2. 方眼紙を整形する</b><span>結合展開・空白補完・UNKNOWN</span></button>
-    <button type="button" data-ws-tab="tableTab"><b>3. 表を確認・編集する</b><span>検索・一括編集・行レビュー</span></button>
-    <button type="button" data-ws-tab="profileTab"><b>4. 様式・タグを設定する</b><span>統制語彙・別名・自動付与</span></button>
-    <button type="button" data-ws-action="validate"><b>5. 検証して出力する</b><span>未確認・未登録タグを解消</span></button>
+    <article class="ws-usecase">
+      <h3>1. Excelを読み込む</h3>
+      <p>シートと変換範囲を選択します。</p>
+      <div class="ws-usecase-actions"><button class="ws-btn primary" type="button" data-ws-action="open">Excelを開く</button><button class="ws-btn" type="button" data-ws-action="open-work">作業中JSONを開く</button></div>
+    </article>
+    <article class="ws-usecase">
+      <h3>2. 方眼紙を整形する</h3>
+      <p>結合展開・空白補完・UNKNOWN付与で表を整えます。</p>
+      <div class="ws-usecase-actions"><button class="ws-btn primary" type="button" data-ws-tab="importTab">整形へ進む</button><button class="ws-btn" type="button" data-ws-action="help">使い方を見る</button></div>
+    </article>
+    <article class="ws-usecase">
+      <h3>3. 表を確認・編集する</h3>
+      <p>検索・一括編集・行レビューで内容を確認します。</p>
+      <div class="ws-usecase-actions"><button class="ws-btn primary" type="button" data-ws-tab="tableTab">確認・編集へ進む</button><button class="ws-btn" type="button" data-ws-action="bulk-review">未確認を一括確認</button></div>
+    </article>
+    <article class="ws-usecase">
+      <h3>4. 様式・タグを設定する</h3>
+      <p>統制語彙・別名・自動付与を設定します。</p>
+      <div class="ws-usecase-actions"><button class="ws-btn primary" type="button" data-ws-tab="profileTab">様式・タグへ進む</button><button class="ws-btn" type="button" data-ws-action="ai-profile">AIで様式作成</button></div>
+    </article>
+    <article class="ws-usecase">
+      <h3>5. 検証して出力する</h3>
+      <p>未確認・未登録タグを解消して出力します。</p>
+      <div class="ws-usecase-actions"><button class="ws-btn primary" type="button" data-ws-action="validate">検証結果を開く</button><button class="ws-btn success" type="button" data-ws-action="trace-export">照合用JSON出力</button></div>
+    </article>
   </div>
 </details>
 
@@ -480,8 +511,8 @@
 </div>
 
 <div class="container">
-  <h1>Excel → JSON 変換・確認ツール v2.0.3</h1>
-  <div class="small" style="margin:-8px 0 12px;">v2.0.3: 「様式・タグ」に「AIで様式作成」を追加し、様式プロファイル仕様書と生成AI用プロンプトを参照可能に。モーダルの無地ボタンが白文字×白背景で見えなくなる不具合を修正</div>
+  <h1>Excel → JSON 変換・確認ツール v2.0.4</h1>
+  <div class="small" style="margin:-8px 0 12px;">v2.0.4: ヘッダーをブランド行・主要操作行・補助操作行に整理し、工程バーの操作ボタンを別行に分離。「目的から操作を開始する」カードに実際の操作ボタンを追加し、仕様書PDF→JSONツールに近いUI構成へ変更</div>
   <p class="lead">Excel / CSVの表を読み込み、表上で変換範囲を選択し、結合セル展開・空白補完・UNKNOWN付与・JSON null識別を行いながらJSON編集、様式適用、照合タグ付与までをブラウザ内で実行します。</p>
 
   <div class="info">
@@ -1888,7 +1919,7 @@ I/F = インターフェース"></textarea>
       trace_format: 'excel-row-trace-v1',
       schema_version: '1.0',
       generated_at: new Date().toISOString(),
-      generator: { name: 'Excel → JSON 変換・確認ツール', version: '2.0.3' },
+      generator: { name: 'Excel → JSON 変換・確認ツール', version: '2.0.4' },
       source: { file_name: fileName, sheet_name: sheet, profile_name: profile.profile_name, profile_version: profile.profile_version || '1.0' },
       tag_policy: {
         mode: profile.tag_policy?.mode || 'controlled', vocabulary_id: profile.tag_policy?.vocabulary_id || 'excel-row-tags',
@@ -3469,7 +3500,7 @@ I/F = インターフェース"></textarea>
   const v20BaseBuildTraceOutput=buildTraceOutput;
   buildTraceOutput=function(records,profile){
     ensureRowStates(); const result=v20BaseBuildTraceOutput(records,profile);
-    result.schema_version='1.1'; result.id_scheme=V20_ID_SCHEME; result.generator.version='2.0.3';
+    result.schema_version='1.1'; result.id_scheme=V20_ID_SCHEME; result.generator.version='2.0.4';
     result.tag_policy.tag_aliases=normalizeAliasMap(profile?.tag_policy?.tag_aliases);
     result._trace_records.forEach((record,index)=>{
       const state=currentCellMeta[index]?.__row_state;
@@ -3627,6 +3658,13 @@ I/F = インターフェース"></textarea>
   document.querySelectorAll('[data-ws-tab]').forEach(btn=>btn.addEventListener('click',()=>switchTab(btn.dataset.wsTab)));
   document.querySelectorAll('[data-ws-action="open"]').forEach(btn=>btn.addEventListener('click',()=>excelFile.click()));
   document.querySelectorAll('[data-ws-action="validate"]').forEach(btn=>btn.addEventListener('click',()=>currentData.length?showValidationModal():excelFile.click()));
+  document.querySelectorAll('[data-ws-action="open-work"]').forEach(btn=>btn.addEventListener('click',()=>$('workJsonInput').click()));
+  document.querySelectorAll('[data-ws-action="help"]').forEach(btn=>btn.addEventListener('click',showWorkspaceHelp));
+  document.querySelectorAll('[data-ws-action="ai-profile"]').forEach(btn=>btn.addEventListener('click',showAiProfileGuide));
+  document.querySelectorAll('[data-ws-action="bulk-review"]').forEach(btn=>btn.addEventListener('click',()=>currentData.length?openBulkReviewModal():excelFile.click()));
+  document.querySelectorAll('[data-ws-action="trace-export"]').forEach(btn=>btn.addEventListener('click',()=>currentData.length?exportTraceJsonV20():excelFile.click()));
+  function syncHeaderHeight(){ const h=document.querySelector('.ws-header'); if(h) document.documentElement.style.setProperty('--ws-header-height',Math.ceil(h.getBoundingClientRect().height)+'px'); }
+  syncHeaderHeight(); window.addEventListener('resize',syncHeaderHeight,{passive:true}); setTimeout(syncHeaderHeight,80);
   window.addEventListener('beforeunload',event=>{if(workspaceDirty){event.preventDefault();event.returnValue='';}});
   document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!$('workspaceModalBackdrop').hidden)closeWorkspaceModal();if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='z'){event.preventDefault();event.shiftKey?workspaceRedo():workspaceUndo();}});
   refreshRestoreAvailability();
