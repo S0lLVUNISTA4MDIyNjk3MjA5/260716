@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Excel → JSON 変換・確認ツール v2.0.1</title>
+  <title>Excel → JSON 変換・確認ツール v2.0.2</title>
   <style>
     :root {
       --bg: #f7f9fc;
@@ -405,7 +405,7 @@
 <body class="app-v20">
 <header class="ws-header" aria-label="Excel JSONツールバー">
   <div class="ws-header-main">
-    <div class="ws-brand">Excel → JSON 変換・確認 <small>v2.0.1</small></div>
+    <div class="ws-brand">Excel → JSON 変換・確認 <small>v2.0.2</small></div>
     <div class="ws-current-profile">
       <label for="workspaceProfileSelect">適用様式</label>
       <select id="workspaceProfileSelect" aria-label="現在のJSON様式"></select>
@@ -479,8 +479,8 @@
 </div>
 
 <div class="container">
-  <h1>Excel → JSON 変換・確認ツール v2.0.1</h1>
-  <div class="small" style="margin:-8px 0 12px;">v2.0.1: 選択中タブの文字色表示を修正</div>
+  <h1>Excel → JSON 変換・確認ツール v2.0.2</h1>
+  <div class="small" style="margin:-8px 0 12px;">v2.0.2: 確認状態（未確認・確認済み・要修正・除外）を色分け表示</div>
   <p class="lead">Excel / CSVの表を読み込み、表上で変換範囲を選択し、結合セル展開・空白補完・UNKNOWN付与・JSON null識別を行いながらJSON編集、様式適用、照合タグ付与までをブラウザ内で実行します。</p>
 
   <div class="info">
@@ -1887,7 +1887,7 @@ I/F = インターフェース"></textarea>
       trace_format: 'excel-row-trace-v1',
       schema_version: '1.0',
       generated_at: new Date().toISOString(),
-      generator: { name: 'Excel → JSON 変換・確認ツール', version: '2.0.1' },
+      generator: { name: 'Excel → JSON 変換・確認ツール', version: '2.0.2' },
       source: { file_name: fileName, sheet_name: sheet, profile_name: profile.profile_name, profile_version: profile.profile_version || '1.0' },
       tag_policy: {
         mode: profile.tag_policy?.mode || 'controlled', vocabulary_id: profile.tag_policy?.vocabulary_id || 'excel-row-tags',
@@ -3468,7 +3468,7 @@ I/F = インターフェース"></textarea>
   const v20BaseBuildTraceOutput=buildTraceOutput;
   buildTraceOutput=function(records,profile){
     ensureRowStates(); const result=v20BaseBuildTraceOutput(records,profile);
-    result.schema_version='1.1'; result.id_scheme=V20_ID_SCHEME; result.generator.version='2.0.1';
+    result.schema_version='1.1'; result.id_scheme=V20_ID_SCHEME; result.generator.version='2.0.2';
     result.tag_policy.tag_aliases=normalizeAliasMap(profile?.tag_policy?.tag_aliases);
     result._trace_records.forEach((record,index)=>{
       const state=currentCellMeta[index]?.__row_state;
