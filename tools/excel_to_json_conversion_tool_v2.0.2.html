@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Excel → JSON 変換・確認ツール v2.0.3</title>
+  <title>Excel → JSON 変換・確認ツール v2.0.2</title>
   <style>
     :root {
       --bg: #f7f9fc;
@@ -405,13 +405,13 @@
 <body class="app-v20">
 <header class="ws-header" aria-label="Excel JSONツールバー">
   <div class="ws-header-main">
-    <div class="ws-brand">Excel → JSON 変換・確認 <small>v2.0.3</small></div>
+    <div class="ws-brand">Excel → JSON 変換・確認 <small>v2.0.2</small></div>
     <div class="ws-current-profile">
       <label for="workspaceProfileSelect">適用様式</label>
       <select id="workspaceProfileSelect" aria-label="現在のJSON様式"></select>
     </div>
     <button id="workspaceOpenExcelBtn" class="ws-btn primary" type="button">Excelを開く</button>
-    <button id="workspaceOpenWorkBtn" class="ws-btn" type="button" title="作業中／確認済み／照合用JSONを読み込み、確認状態・タグ・照合キーを引き継ぎます">JSON読込（作業／確認済／照合用）</button>
+    <button id="workspaceOpenWorkBtn" class="ws-btn" type="button">作業中JSONを開く</button>
     <button id="workspaceJsonViewBtn" class="ws-btn" type="button" disabled>JSON表示</button>
     <button id="workspaceValidateBtn" class="ws-btn" type="button" disabled>検証結果</button>
     <button id="workspaceTraceExportBtn" class="ws-btn success" type="button" disabled>照合用JSON出力</button>
@@ -479,8 +479,8 @@
 </div>
 
 <div class="container">
-  <h1>Excel → JSON 変換・確認ツール v2.0.3</h1>
-  <div class="small" style="margin:-8px 0 12px;">v2.0.3: 確認済み／照合用JSONの再読込で確認状態・タグ・照合キーを継承（複数人作業・一時保存用）／ v2.0.2: 確認状態を色分け表示</div>
+  <h1>Excel → JSON 変換・確認ツール v2.0.2</h1>
+  <div class="small" style="margin:-8px 0 12px;">v2.0.2: 確認状態（未確認・確認済み・要修正・除外）を色分け表示</div>
   <p class="lead">Excel / CSVの表を読み込み、表上で変換範囲を選択し、結合セル展開・空白補完・UNKNOWN付与・JSON null識別を行いながらJSON編集、様式適用、照合タグ付与までをブラウザ内で実行します。</p>
 
   <div class="info">
@@ -1887,7 +1887,7 @@ I/F = インターフェース"></textarea>
       trace_format: 'excel-row-trace-v1',
       schema_version: '1.0',
       generated_at: new Date().toISOString(),
-      generator: { name: 'Excel → JSON 変換・確認ツール', version: '2.0.3' },
+      generator: { name: 'Excel → JSON 変換・確認ツール', version: '2.0.2' },
       source: { file_name: fileName, sheet_name: sheet, profile_name: profile.profile_name, profile_version: profile.profile_version || '1.0' },
       tag_policy: {
         mode: profile.tag_policy?.mode || 'controlled', vocabulary_id: profile.tag_policy?.vocabulary_id || 'excel-row-tags',
@@ -3468,7 +3468,7 @@ I/F = インターフェース"></textarea>
   const v20BaseBuildTraceOutput=buildTraceOutput;
   buildTraceOutput=function(records,profile){
     ensureRowStates(); const result=v20BaseBuildTraceOutput(records,profile);
-    result.schema_version='1.1'; result.id_scheme=V20_ID_SCHEME; result.generator.version='2.0.3';
+    result.schema_version='1.1'; result.id_scheme=V20_ID_SCHEME; result.generator.version='2.0.2';
     result.tag_policy.tag_aliases=normalizeAliasMap(profile?.tag_policy?.tag_aliases);
     result._trace_records.forEach((record,index)=>{
       const state=currentCellMeta[index]?.__row_state;
@@ -3544,72 +3544,8 @@ I/F = インターフェース"></textarea>
     const name=(sourceFile?.name||'excel').replace(/\.[^.]+$/,''); downloadText(JSON.stringify(trace,null,2),`${name}_trace_v1_1.json`,'application/json');
   }
 
-  function restoreFromConfirmedPackage(obj) {
-    const records = Array.isArray(obj.records) ? obj.records : [];
-    const baseProfile = activeProfile ? deepClone(activeProfile) : null;
-    if (baseProfile && obj.tag_policy) baseProfile.tag_policy = { ...(baseProfile.tag_policy||{}), ...obj.tag_policy };
-    const fields = reviewFieldNames();
-    const cellMeta = [];
-    const rows = records.map((record, index) => {
-      const row = deepClone(record.data || {});
-      const tags = uniqueStrings(parseTagValue(record.tags));
-      const unregistered = uniqueStrings(parseTagValue(record.unregistered_tags));
-      setByPath(row, fields.review, record.review_status || 'unreviewed');
-      setByPath(row, fields.tags, tags);
-      setByPath(row, fields.unregistered, unregistered);
-      cellMeta[index] = { __row_state: {
-        uid: record.stable_uid || '', trace_id: record.id || record.trace_id || '', content_hash: record.content_hash || '',
-        review_status: record.review_status || 'unreviewed', review_method: record.review_method || '', reviewed_at: record.reviewed_at || '',
-        reviewer: record.reviewer || '', review_comment: record.review_comment || '', exclusion_reason: record.exclusion_reason || '',
-        tags, unregistered_tags: unregistered,
-        source_file: record.source?.file_name || '', source_sheet: record.source?.sheet_name || '', source_row: record.source?.row || ''
-      } };
-      return row;
-    });
-    restoreWorkspaceObject({
-      work_format: V20_WORK_FORMAT, current_records: rows, cell_meta: cellMeta, output_data: rows,
-      active_profile: baseProfile, source: { file_name: obj.source?.file_name || '', sheet_name: obj.source?.sheet_name || '' },
-      document_meta: obj.document || {}, _tool_state: { history: obj._tool_state?.history || [] }
-    }, `確認済みJSONを読み込み、確認状態・タグを復元しました（${rows.length}件）。`);
-  }
-
-  function restoreFromTracePackage(obj) {
-    const records = Array.isArray(obj._trace_records) ? obj._trace_records : [];
-    const baseProfile = activeProfile ? deepClone(activeProfile) : null;
-    if (baseProfile && obj.tag_policy) baseProfile.tag_policy = { ...(baseProfile.tag_policy||{}), ...obj.tag_policy };
-    const cellMeta = [];
-    const rows = records.map((record, index) => {
-      const row = deepClone(record);
-      cellMeta[index] = { __row_state: {
-        uid: record.stable_uid || '', trace_id: record.trace_id || record.id || '', content_hash: record.content_hash || '',
-        review_status: record.review_status || 'unreviewed', review_method: record.review_method || '', reviewed_at: record.reviewed_at || '',
-        reviewer: record.reviewer || '', review_comment: record.review_comment || '', exclusion_reason: record.exclusion_reason || '',
-        tags: uniqueStrings(parseTagValue(record.tags)), unregistered_tags: uniqueStrings(parseTagValue(record.unregistered_tags)),
-        source_row: record.source_row || ''
-      } };
-      return row;
-    });
-    restoreWorkspaceObject({
-      work_format: V20_WORK_FORMAT, current_records: rows, cell_meta: cellMeta, output_data: rows, profile_record_key: '_trace_records',
-      active_profile: baseProfile, source: { file_name: obj.source?.file_name || obj.file_name || '', sheet_name: obj.source?.sheet_name || '' },
-      document_meta: obj.document || {}, _tool_state: { history: [] }
-    }, `照合用JSONを読み込み、確認状態・タグを復元しました（${rows.length}件）。`);
-  }
-
   async function importWorkJson(file) {
-    if (!file) return;
-    try {
-      const obj = JSON.parse(await file.text());
-      if (obj.work_format === V20_WORK_FORMAT || obj.current_records) {
-        restoreWorkspaceObject(obj, '作業中JSONを読み込みました。');
-      } else if (obj.confirmed_format === 'excel-document-model-v2' || (Array.isArray(obj.records) && obj.records.some(r => r && 'data' in r))) {
-        restoreFromConfirmedPackage(obj);
-      } else if (obj.trace_format || Array.isArray(obj._trace_records)) {
-        restoreFromTracePackage(obj);
-      } else {
-        throw new Error('対応していないJSON形式です。作業中／確認済み／照合用JSONを指定してください。');
-      }
-    } catch (error) { alert(`JSONを読み込めませんでした: ${error.message}`); }
+    if(!file)return; try{const obj=JSON.parse(await file.text());if(obj.work_format!==V20_WORK_FORMAT&&!obj.current_records)throw new Error('Excel→JSON作業中ファイルではありません。');restoreWorkspaceObject(obj,'作業中JSONを読み込みました。');}catch(error){alert(`作業中JSONを読み込めませんでした: ${error.message}`);}
   }
 
   function showJsonViewer() {
