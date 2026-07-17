@@ -32,9 +32,16 @@
      refreshDetailAndGraphForConfidenceで照合結果一覧・ナレッジグラフへ反映する。
      「標準設定に戻す」はV1.2のisOpaqueIdFieldNameガード適用後のdefaultKeyPairsを使うため、
      不透明ハッシュIDのcode誤照合は再発しない。 -->
+  <!-- V1.4: ナレッジグラフのノード・エッジが力学（cose）レイアウト固定のため重なって見づらい
+     という指摘を受け、フル版と同じグラフ操作UIを復活させた。「グラフ粒度」（標準＋グループ枠／
+     概要グラフの手動切替）と「自動整列」（二列整列／階層／力学／格子／円形）のボタン行を
+     ナレッジグラフタブへ追加。runGraphLayout/computeTwoColPositions等の処理ロジック自体は
+     フル版と同一のものが休眠していただけで、対応するHTML要素を追加しただけで動作する。
+     ノード数に応じた標準⇔概要の自動切替（GRAPH_OVERVIEW_NODE_THRESHOLD）はそのまま維持し、
+     手動切替も可能にした。 -->
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>JSON A/B トレース照合ツール（簡易版）V1.3</title>
+  <title>JSON A/B トレース照合ツール（簡易版）V1.4</title>
   <script src="https://unpkg.com/cytoscape@3.26.0/dist/cytoscape.min.js"></script>
   <!-- 軽量形態素解析（読み込み失敗時は文字種チャンクに自動フォールバック） -->
   <script src="https://unpkg.com/tiny-segmenter@0.2.0/dist/tiny-segmenter-0.2.0.js" onerror="window.__tsLoadFailed=true"></script>
@@ -427,7 +434,7 @@
 </style>
 </head>
 <body>
-<h1>JSON A/B トレース照合ツール（簡易版）V1.3</h1>
+<h1>JSON A/B トレース照合ツール（簡易版）V1.4</h1>
 
 <!-- ── 入力・実行 / 出力・保存 ── -->
 <div class="card">
@@ -572,9 +579,20 @@
       <h2 style="margin:0;">ナレッジグラフ</h2>
       <button id="basisToggleGraph" class="secondary" style="padding:5px 14px; font-size:12px;">基準: JSON A → JSON B（クリックで切替）</button>
     </div>
-    <div style="font-size:12px; color:var(--muted); margin-bottom:8px;">グラフはノード数に応じて標準表示⇔概要表示を自動的に切り替えます。表示範囲は上部の最小信頼度スライダー（照合結果一覧タブ）に連動します。</div>
+    <div style="font-size:12px; color:var(--muted); margin-bottom:8px;">グラフはノード数に応じて標準表示⇔概要表示を自動的に切り替えます（下記ボタンで手動切替も可能）。表示範囲は上部の最小信頼度スライダー（照合結果一覧タブ）に連動します。ノードやエッジが重なって見づらいときは、下記の「自動整列」で別のレイアウトを試してください。</div>
     <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
-      <button id="graphFitBtn" class="layout-btn">⊞ 全体表示</button>
+      <span style="font-size:12px; color:var(--muted); font-weight:600;">グラフ粒度:</span>
+      <button class="layout-btn graph-mode-btn active" data-graph-mode="standard" type="button">標準＋グループ枠</button>
+      <button class="layout-btn graph-mode-btn" data-graph-mode="overview" type="button">概要グラフ</button>
+    </div>
+    <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
+      <span style="font-size:12px; color:var(--muted); font-weight:600;">自動整列:</span>
+      <button class="layout-btn" data-layout="twocol">二列整列</button>
+      <button class="layout-btn" data-layout="breadthfirst">階層</button>
+      <button class="layout-btn active" data-layout="cose">力学</button>
+      <button class="layout-btn" data-layout="grid">格子</button>
+      <button class="layout-btn" data-layout="circle">円形</button>
+      <button id="graphFitBtn" class="layout-btn" style="margin-left:8px;">⊞ 全体表示</button>
     </div>
     <div class="legend">
       <div class="legend-item"><div class="legend-dot" style="background:#eff6ff;border-color:#1d4ed8;"></div>JSON A項目</div>
@@ -689,7 +707,7 @@
     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
       <div>
         <h2 style="display:inline; margin:0;">HELP：操作マニュアル</h2>
-        <span style="font-size:12px; color:var(--muted); margin-left:8px;">簡易版 V1.3内蔵ヘルプ</span>
+        <span style="font-size:12px; color:var(--muted); margin-left:8px;">簡易版 V1.4内蔵ヘルプ</span>
       </div>
       <div class="actions" style="margin:0;">
         <button id="helpExpandAllBtn" class="secondary" type="button">すべて開く</button>
@@ -1365,7 +1383,7 @@
   /* ═══════════════════════════════════════════
      HELP機能
   ═══════════════════════════════════════════ */
-  const HELP_MARKDOWN = `# JSON A/B トレース照合ツール（簡易版）V1.3 HELP
+  const HELP_MARKDOWN = `# JSON A/B トレース照合ツール（簡易版）V1.4 HELP
 
 ## このツールの目的
 JSON A（上流・照合元）とJSON B（下流・比較対象）を読み込み、「読み込み・照合」の1回の操作で
@@ -1444,7 +1462,7 @@ A. フル版の json_ab_trace_matching_tool をご利用ください。
     });
     expand?.addEventListener('click', () => document.querySelectorAll('#helpSections details').forEach(d => d.open = true));
     collapse?.addEventListener('click', () => document.querySelectorAll('#helpSections details').forEach(d => d.open = false));
-    download?.addEventListener('click', () => downloadText('lite_v1.3_HELP_manual.md', HELP_MARKDOWN, 'text/markdown'));
+    download?.addEventListener('click', () => downloadText('lite_v1.4_HELP_manual.md', HELP_MARKDOWN, 'text/markdown'));
   }
 
 
@@ -2000,7 +2018,7 @@ A. フル版の json_ab_trace_matching_tool をご利用ください。
 
   // ── デフォルト定義 ──
   let matchLogic = {
-    version: 'lite-1.3',
+    version: 'lite-1.4',
     // 簡易版: UIでの編集はできず既定値で内部固定。0.5を下限として候補を生成し、
     // 表示側は最小信頼度スライダー(globalMinConfidence、既定0.7)で再フィルタする。
     minConfidence: 0.5,
@@ -2152,7 +2170,7 @@ A. フル版の json_ab_trace_matching_tool をご利用ください。
   function traceProfileExportPayload() {
     const active = activeTraceProfile();
     return {
-      version: 'lite-1.3',
+      version: 'lite-1.4',
       exported_at: new Date().toISOString(),
       activeTraceProfileId: matchLogic.traceProfile || 'generic',
       traceProfiles: JSON.parse(JSON.stringify(userTraceProfiles)),
@@ -8080,7 +8098,7 @@ ${h.name}`, type:'requirement', detail:srcA };
   };
   normalizeReviewStoreInPlace();
   normalizeManualStoresInPlace();
-  matchLogic.version = 'lite-1.3';
+  matchLogic.version = 'lite-1.4';
 })();
 </script>
 
@@ -8097,7 +8115,7 @@ ${h.name}`, type:'requirement', detail:srcA };
 (() => {
   const RO_CRATE_CONTEXT = 'https://w3id.org/ro/crate/1.1/context';
   const RO_CRATE_CONFORMS = 'https://w3id.org/ro/crate/1.1';
-  const TOOL_VERSION = 'lite-1.3';
+  const TOOL_VERSION = 'lite-1.4';
   const STORAGE_KEY = 'v11_17_artifact_export_settings';
   const MiB = 1024 * 1024;
   const exportSettings = {
@@ -8467,7 +8485,7 @@ ${h.name}`, type:'requirement', detail:srcA };
   ['roCrateDatasetName','roCrateDescription','roCrateLicense','roCrateCreatorName','roCrateCreatorId'].forEach(id=>$(id)?.addEventListener('input',()=>{outputTextCache={};}));
 
   loadSettings();
-  matchLogic.version='lite-1.3';
+  matchLogic.version='lite-1.4';
   window.__liteRoCrate=Object.freeze({
     exportSettings, currentSettings,
     buildRoCrateMetadata, validateRoCratePackage, createZipBytes, safeZipBasename, uriPath,
