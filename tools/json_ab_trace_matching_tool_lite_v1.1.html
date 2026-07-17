@@ -11,9 +11,15 @@
      モデルテキスト出力タブ（SysML/ReqIF出力含む）、Excel出力一式（xlsx依存を排除）、
      人手レビュー・手動関係・付け替え・編集モード・照合プロファイル選択UI、
      グラフ保存(JSON)/保存済みグラフ読込、詳細列表示切替トグル。 -->
+  <!-- V1.1: 照合結果一覧の「キー」列（旧: 表示名）を、項目の表示名ではなく照合に使われた
+     タグ・一致語句を表示するよう変更（JSON Aキー/JSON Bキー＝基準側項目自身のタグ、
+     キー一覧＝各照合で一致した語句・タグ、最大信頼度の照合キー＝最大信頼度を出した照合の
+     一致語句）。表示名は基準側項目にタグがない場合のみフォールバック表示する。HELPタブ・
+     ダウンロード用HELP_MARKDOWNも同様に更新。削除済みタブ（照合ロジック設定）への
+     残留フォールバック参照（currentTabId）も併せて修正。 -->
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>JSON A/B トレース照合ツール（簡易版）V1.0</title>
+  <title>JSON A/B トレース照合ツール（簡易版）V1.1</title>
   <script src="https://unpkg.com/cytoscape@3.26.0/dist/cytoscape.min.js"></script>
   <!-- 軽量形態素解析（読み込み失敗時は文字種チャンクに自動フォールバック） -->
   <script src="https://unpkg.com/tiny-segmenter@0.2.0/dist/tiny-segmenter-0.2.0.js" onerror="window.__tsLoadFailed=true"></script>
@@ -406,7 +412,7 @@
 </style>
 </head>
 <body>
-<h1>JSON A/B トレース照合ツール（簡易版）V1.0</h1>
+<h1>JSON A/B トレース照合ツール（簡易版）V1.1</h1>
 
 <!-- ── 入力・実行 / 出力・保存 ── -->
 <div class="card">
@@ -637,7 +643,7 @@
     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
       <div>
         <h2 style="display:inline; margin:0;">HELP：操作マニュアル</h2>
-        <span style="font-size:12px; color:var(--muted); margin-left:8px;">簡易版 V1.0内蔵ヘルプ</span>
+        <span style="font-size:12px; color:var(--muted); margin-left:8px;">簡易版 V1.1内蔵ヘルプ</span>
       </div>
       <div class="actions" style="margin:0;">
         <button id="helpExpandAllBtn" class="secondary" type="button">すべて開く</button>
@@ -1313,7 +1319,7 @@
   /* ═══════════════════════════════════════════
      HELP機能
   ═══════════════════════════════════════════ */
-  const HELP_MARKDOWN = `# JSON A/B トレース照合ツール（簡易版）V1.0 HELP
+  const HELP_MARKDOWN = `# JSON A/B トレース照合ツール（簡易版）V1.1 HELP
 
 ## このツールの目的
 JSON A（上流・照合元）とJSON B（下流・比較対象）を読み込み、「読み込み・照合」の1回の操作で
@@ -1392,7 +1398,7 @@ A. フル版の json_ab_trace_matching_tool をご利用ください。
     });
     expand?.addEventListener('click', () => document.querySelectorAll('#helpSections details').forEach(d => d.open = true));
     collapse?.addEventListener('click', () => document.querySelectorAll('#helpSections details').forEach(d => d.open = false));
-    download?.addEventListener('click', () => downloadText('lite_v1.0_HELP_manual.md', HELP_MARKDOWN, 'text/markdown'));
+    download?.addEventListener('click', () => downloadText('lite_v1.1_HELP_manual.md', HELP_MARKDOWN, 'text/markdown'));
   }
 
 
@@ -1948,7 +1954,7 @@ A. フル版の json_ab_trace_matching_tool をご利用ください。
 
   // ── デフォルト定義 ──
   let matchLogic = {
-    version: 'lite-1.0',
+    version: 'lite-1.1',
     // 簡易版: UIでの編集はできず既定値で内部固定。0.5を下限として候補を生成し、
     // 表示側は最小信頼度スライダー(globalMinConfidence、既定0.7)で再フィルタする。
     minConfidence: 0.5,
@@ -2100,7 +2106,7 @@ A. フル版の json_ab_trace_matching_tool をご利用ください。
   function traceProfileExportPayload() {
     const active = activeTraceProfile();
     return {
-      version: 'lite-1.0',
+      version: 'lite-1.1',
       exported_at: new Date().toISOString(),
       activeTraceProfileId: matchLogic.traceProfile || 'generic',
       traceProfiles: JSON.parse(JSON.stringify(userTraceProfiles)),
@@ -7984,7 +7990,7 @@ ${h.name}`, type:'requirement', detail:srcA };
   };
   normalizeReviewStoreInPlace();
   normalizeManualStoresInPlace();
-  matchLogic.version = 'lite-1.0';
+  matchLogic.version = 'lite-1.1';
 })();
 </script>
 
@@ -8001,7 +8007,7 @@ ${h.name}`, type:'requirement', detail:srcA };
 (() => {
   const RO_CRATE_CONTEXT = 'https://w3id.org/ro/crate/1.1/context';
   const RO_CRATE_CONFORMS = 'https://w3id.org/ro/crate/1.1';
-  const TOOL_VERSION = 'lite-1.0';
+  const TOOL_VERSION = 'lite-1.1';
   const STORAGE_KEY = 'v11_17_artifact_export_settings';
   const MiB = 1024 * 1024;
   const exportSettings = {
@@ -8371,7 +8377,7 @@ ${h.name}`, type:'requirement', detail:srcA };
   ['roCrateDatasetName','roCrateDescription','roCrateLicense','roCrateCreatorName','roCrateCreatorId'].forEach(id=>$(id)?.addEventListener('input',()=>{outputTextCache={};}));
 
   loadSettings();
-  matchLogic.version='lite-1.0';
+  matchLogic.version='lite-1.1';
   window.__liteRoCrate=Object.freeze({
     exportSettings, currentSettings,
     buildRoCrateMetadata, validateRoCratePackage, createZipBytes, safeZipBasename, uriPath,
