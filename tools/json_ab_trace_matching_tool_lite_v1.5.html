@@ -39,9 +39,15 @@
      フル版と同一のものが休眠していただけで、対応するHTML要素を追加しただけで動作する。
      ノード数に応じた標準⇔概要の自動切替（GRAPH_OVERVIEW_NODE_THRESHOLD）はそのまま維持し、
      手動切替も可能にした。 -->
+  <!-- V1.5: 照合キー設定の変更が挙動不安定に感じられるとの指摘を受け、フル版と同じ「🔄 再照合
+     して反映」ボタン（rerunMatchBtn）を照合キー設定パネルに追加。V1.3で導入した「変更のたびに
+     即座に一覧・グラフを再描画する」挙動を廃止し、有効/無効切替・キー変更・追加・削除・標準設定
+     復元はいずれもmatchLogic.keyPairsとテーブル表示のみを即座に更新するに留め、実際の再照合・
+     結果反映は再照合ボタンを押すまで行わないようにした。複数項目を続けて編集している途中で
+     毎回再計算が走ることによる不安定さを解消する。 -->
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>JSON A/B トレース照合ツール（簡易版）V1.4</title>
+  <title>JSON A/B トレース照合ツール（簡易版）V1.5</title>
   <script src="https://unpkg.com/cytoscape@3.26.0/dist/cytoscape.min.js"></script>
   <!-- 軽量形態素解析（読み込み失敗時は文字種チャンクに自動フォールバック） -->
   <script src="https://unpkg.com/tiny-segmenter@0.2.0/dist/tiny-segmenter-0.2.0.js" onerror="window.__tsLoadFailed=true"></script>
@@ -434,7 +440,7 @@
 </style>
 </head>
 <body>
-<h1>JSON A/B トレース照合ツール（簡易版）V1.4</h1>
+<h1>JSON A/B トレース照合ツール（簡易版）V1.5</h1>
 
 <!-- ── 入力・実行 / 出力・保存 ── -->
 <div class="card">
@@ -665,9 +671,10 @@
       </summary>
       <div style="padding:12px; border:1px solid #e2e8f0; border-top:none; border-radius:0 0 8px 8px; background:#fafcff;">
         <p style="font-size:12px; color:var(--muted); margin:0 0 10px;">
-          JSON Aの任意キーと、JSON Bの任意キーをペア指定して照合できます。変更は照合結果一覧・ナレッジグラフへ即座に反映されます。
+          JSON Aの任意キーと、JSON Bの任意キーをペア指定して照合できます。変更後は「🔄 再照合して反映」を押すと照合結果一覧・ナレッジグラフへ反映されます。
         </p>
         <div class="actions" style="margin:0 0 10px;">
+          <button id="rerunMatchBtn" class="success" style="padding:6px 12px;">🔄 再照合して反映</button>
           <button id="addKeyPairBtn" class="secondary" style="padding:6px 12px;">＋ 照合ペアを追加</button>
           <button id="resetKeyPairsBtn" class="secondary" style="padding:6px 12px;">標準設定に戻す</button>
         </div>
@@ -707,7 +714,7 @@
     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
       <div>
         <h2 style="display:inline; margin:0;">HELP：操作マニュアル</h2>
-        <span style="font-size:12px; color:var(--muted); margin-left:8px;">簡易版 V1.4内蔵ヘルプ</span>
+        <span style="font-size:12px; color:var(--muted); margin-left:8px;">簡易版 V1.5内蔵ヘルプ</span>
       </div>
       <div class="actions" style="margin:0;">
         <button id="helpExpandAllBtn" class="secondary" type="button">すべて開く</button>
@@ -1383,7 +1390,7 @@
   /* ═══════════════════════════════════════════
      HELP機能
   ═══════════════════════════════════════════ */
-  const HELP_MARKDOWN = `# JSON A/B トレース照合ツール（簡易版）V1.4 HELP
+  const HELP_MARKDOWN = `# JSON A/B トレース照合ツール（簡易版）V1.5 HELP
 
 ## このツールの目的
 JSON A（上流・照合元）とJSON B（下流・比較対象）を読み込み、「読み込み・照合」の1回の操作で
@@ -1462,7 +1469,7 @@ A. フル版の json_ab_trace_matching_tool をご利用ください。
     });
     expand?.addEventListener('click', () => document.querySelectorAll('#helpSections details').forEach(d => d.open = true));
     collapse?.addEventListener('click', () => document.querySelectorAll('#helpSections details').forEach(d => d.open = false));
-    download?.addEventListener('click', () => downloadText('lite_v1.4_HELP_manual.md', HELP_MARKDOWN, 'text/markdown'));
+    download?.addEventListener('click', () => downloadText('lite_v1.5_HELP_manual.md', HELP_MARKDOWN, 'text/markdown'));
   }
 
 
@@ -2018,7 +2025,7 @@ A. フル版の json_ab_trace_matching_tool をご利用ください。
 
   // ── デフォルト定義 ──
   let matchLogic = {
-    version: 'lite-1.4',
+    version: 'lite-1.5',
     // 簡易版: UIでの編集はできず既定値で内部固定。0.5を下限として候補を生成し、
     // 表示側は最小信頼度スライダー(globalMinConfidence、既定0.7)で再フィルタする。
     minConfidence: 0.5,
@@ -2170,7 +2177,7 @@ A. フル版の json_ab_trace_matching_tool をご利用ください。
   function traceProfileExportPayload() {
     const active = activeTraceProfile();
     return {
-      version: 'lite-1.4',
+      version: 'lite-1.5',
       exported_at: new Date().toISOString(),
       activeTraceProfileId: matchLogic.traceProfile || 'generic',
       traceProfiles: JSON.parse(JSON.stringify(userTraceProfiles)),
@@ -2608,11 +2615,14 @@ A. フル版の json_ab_trace_matching_tool をご利用ください。
       const enabled = matchLogic.keyPairs.filter(p => p.enabled && p.sysField && p.plmField).length;
       const total = matchLogic.keyPairs.length;
       const keyNote = (!sysKeys.length || !plmKeys.length) ? ' キー候補が未検出です。JSON A/B読込後に再度開いてください。' : '';
-      hint.textContent = `有効な照合ペア: ${enabled}件 / 表示行: ${total}件。変更は照合結果一覧・ナレッジグラフへ即座に反映されます。${keyNote}`;
+      hint.textContent = `有効な照合ペア: ${enabled}件 / 表示行: ${total}件。変更後は「🔄 再照合して反映」を押してください。${keyNote}`;
     }
   }
 
-  // 簡易版: 「再照合」ボタンがないため、照合キーペアの変更は即座に一覧・グラフへ反映する。
+  // 簡易版: 照合キーペアの変更はテーブル表示のみ即座に更新し、実際の再照合・結果反映は
+  // 「🔄 再照合して反映」ボタン（rerunMatchBtn）を押すまで行わない。変更のたびに自動で
+  // 結果一覧・グラフを再描画すると、複数項目を続けて編集している途中で毎回再計算が走り
+  // 挙動が不安定に感じられるため（V1.3の反省）。
   window.updateKeyPair = (idx, prop, val) => {
     matchLogic.keyPairs = sanitizeKeyPairs(matchLogic.keyPairs, { allowIncomplete:true, fallback:false });
     if (!matchLogic.keyPairs[idx]) return;
@@ -2621,7 +2631,6 @@ A. フル版の json_ab_trace_matching_tool をご利用ください。
     invalidateMatchCache();
     markTraceTagsDirty('照合キーペアが変更されました');
     renderKeyPairTable();
-    refreshDetailAndGraphForConfidence();
   };
 
   window.deleteKeyPair = (idx) => {
@@ -2631,7 +2640,6 @@ A. フル版の json_ab_trace_matching_tool をご利用ください。
     invalidateMatchCache();
     markTraceTagsDirty('照合キーペアが変更されました');
     renderKeyPairTable();
-    refreshDetailAndGraphForConfidence();
   };
 
   $('addKeyPairBtn')?.addEventListener('click', () => {
@@ -2649,7 +2657,6 @@ A. フル版の json_ab_trace_matching_tool をご利用ください。
     invalidateMatchCache();
     markTraceTagsDirty('照合キーペアが追加されました');
     renderKeyPairTable();
-    refreshDetailAndGraphForConfidence();
   });
 
   $('resetKeyPairsBtn')?.addEventListener('click', () => {
@@ -2657,7 +2664,13 @@ A. フル版の json_ab_trace_matching_tool をご利用ください。
     invalidateMatchCache();
     markTraceTagsDirty('照合キーペアを標準設定へ戻しました');
     renderKeyPairTable();
+  });
+
+  $('rerunMatchBtn')?.addEventListener('click', () => {
+    if (!mergedResult?.sysList || !mergedResult?.plmList) { alert('先にJSON A/Bを読み込んでください。'); return; }
+    invalidateMatchCache();
     refreshDetailAndGraphForConfidence();
+    statusEl.textContent = '照合キー設定の変更を反映しました。';
   });
 
   // ── 照合用正規化 ──
@@ -8098,7 +8111,7 @@ ${h.name}`, type:'requirement', detail:srcA };
   };
   normalizeReviewStoreInPlace();
   normalizeManualStoresInPlace();
-  matchLogic.version = 'lite-1.4';
+  matchLogic.version = 'lite-1.5';
 })();
 </script>
 
@@ -8115,7 +8128,7 @@ ${h.name}`, type:'requirement', detail:srcA };
 (() => {
   const RO_CRATE_CONTEXT = 'https://w3id.org/ro/crate/1.1/context';
   const RO_CRATE_CONFORMS = 'https://w3id.org/ro/crate/1.1';
-  const TOOL_VERSION = 'lite-1.4';
+  const TOOL_VERSION = 'lite-1.5';
   const STORAGE_KEY = 'v11_17_artifact_export_settings';
   const MiB = 1024 * 1024;
   const exportSettings = {
@@ -8485,7 +8498,7 @@ ${h.name}`, type:'requirement', detail:srcA };
   ['roCrateDatasetName','roCrateDescription','roCrateLicense','roCrateCreatorName','roCrateCreatorId'].forEach(id=>$(id)?.addEventListener('input',()=>{outputTextCache={};}));
 
   loadSettings();
-  matchLogic.version='lite-1.4';
+  matchLogic.version='lite-1.5';
   window.__liteRoCrate=Object.freeze({
     exportSettings, currentSettings,
     buildRoCrateMetadata, validateRoCratePackage, createZipBytes, safeZipBasename, uriPath,
