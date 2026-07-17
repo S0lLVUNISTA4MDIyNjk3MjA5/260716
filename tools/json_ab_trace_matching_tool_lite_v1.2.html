@@ -17,9 +17,16 @@
      一致語句）。表示名は基準側項目にタグがない場合のみフォールバック表示する。HELPタブ・
      ダウンロード用HELP_MARKDOWNも同様に更新。削除済みタブ（照合ロジック設定）への
      残留フォールバック参照（currentTabId）も併せて修正。 -->
+  <!-- V1.2: 既定の照合キー選定（code役フィールド自動選択）が、id/trace_id等の文書ごとに
+     独立生成される不透明な識別子（ハッシュ値）を「コードらしい列」として誤って選んでしまい、
+     A/B双方で無関係なハッシュ同士の偶然の部分一致（例:「fc」）が高信頼度スコアになって
+     照合結果一覧が意味不明になる不具合を修正。id/trace_id/stable_uid/stable_key/*_hash等の
+     名前パターンを持つ列は、code役フィールドの候補から除外するようにした（scoreFieldForRole内の
+     isOpaqueIdFieldNameガード）。該当データではcode照合ペアが自動的に見送られ、
+     tag・auto（本文類似）等の意味のある方式のみで照合されるようになる。 -->
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>JSON A/B トレース照合ツール（簡易版）V1.1</title>
+  <title>JSON A/B トレース照合ツール（簡易版）V1.2</title>
   <script src="https://unpkg.com/cytoscape@3.26.0/dist/cytoscape.min.js"></script>
   <!-- 軽量形態素解析（読み込み失敗時は文字種チャンクに自動フォールバック） -->
   <script src="https://unpkg.com/tiny-segmenter@0.2.0/dist/tiny-segmenter-0.2.0.js" onerror="window.__tsLoadFailed=true"></script>
@@ -412,7 +419,7 @@
 </style>
 </head>
 <body>
-<h1>JSON A/B トレース照合ツール（簡易版）V1.1</h1>
+<h1>JSON A/B トレース照合ツール（簡易版）V1.2</h1>
 
 <!-- ── 入力・実行 / 出力・保存 ── -->
 <div class="card">
@@ -643,7 +650,7 @@
     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
       <div>
         <h2 style="display:inline; margin:0;">HELP：操作マニュアル</h2>
-        <span style="font-size:12px; color:var(--muted); margin-left:8px;">簡易版 V1.1内蔵ヘルプ</span>
+        <span style="font-size:12px; color:var(--muted); margin-left:8px;">簡易版 V1.2内蔵ヘルプ</span>
       </div>
       <div class="actions" style="margin:0;">
         <button id="helpExpandAllBtn" class="secondary" type="button">すべて開く</button>
@@ -1319,7 +1326,7 @@
   /* ═══════════════════════════════════════════
      HELP機能
   ═══════════════════════════════════════════ */
-  const HELP_MARKDOWN = `# JSON A/B トレース照合ツール（簡易版）V1.1 HELP
+  const HELP_MARKDOWN = `# JSON A/B トレース照合ツール（簡易版）V1.2 HELP
 
 ## このツールの目的
 JSON A（上流・照合元）とJSON B（下流・比較対象）を読み込み、「読み込み・照合」の1回の操作で
@@ -1398,7 +1405,7 @@ A. フル版の json_ab_trace_matching_tool をご利用ください。
     });
     expand?.addEventListener('click', () => document.querySelectorAll('#helpSections details').forEach(d => d.open = true));
     collapse?.addEventListener('click', () => document.querySelectorAll('#helpSections details').forEach(d => d.open = false));
-    download?.addEventListener('click', () => downloadText('lite_v1.1_HELP_manual.md', HELP_MARKDOWN, 'text/markdown'));
+    download?.addEventListener('click', () => downloadText('lite_v1.2_HELP_manual.md', HELP_MARKDOWN, 'text/markdown'));
   }
 
 
@@ -1954,7 +1961,7 @@ A. フル版の json_ab_trace_matching_tool をご利用ください。
 
   // ── デフォルト定義 ──
   let matchLogic = {
-    version: 'lite-1.1',
+    version: 'lite-1.2',
     // 簡易版: UIでの編集はできず既定値で内部固定。0.5を下限として候補を生成し、
     // 表示側は最小信頼度スライダー(globalMinConfidence、既定0.7)で再フィルタする。
     minConfidence: 0.5,
@@ -2106,7 +2113,7 @@ A. フル版の json_ab_trace_matching_tool をご利用ください。
   function traceProfileExportPayload() {
     const active = activeTraceProfile();
     return {
-      version: 'lite-1.1',
+      version: 'lite-1.2',
       exported_at: new Date().toISOString(),
       activeTraceProfileId: matchLogic.traceProfile || 'generic',
       traceProfiles: JSON.parse(JSON.stringify(userTraceProfiles)),
@@ -2352,10 +2359,23 @@ A. フル版の json_ab_trace_matching_tool をご利用ください。
     return checked ? hits / checked : 0;
   }
 
+  // 簡易版: このツール群（仕様書PDF→JSON/Excel→JSON）が生成するJSONは、id/trace_id/
+  // stable_uid/stable_key/*_id/*_hash 等の名前で、文書ごとに独立生成される不透明な識別子
+  // （ハッシュ値やUUID相当）を持つ。これらは値の形がコードらしく見えるため素朴なヒューリス
+  // ティックでは「code」役に選ばれやすいが、A/B双方で無関係に生成されるため偶然の部分一致
+  // （例:「fc」）が高信頼度スコアになり、照合結果一覧が意味不明になる。code役の選定からは除外する。
+  function isOpaqueIdFieldName(key) {
+    const k = normalizeText(key);
+    if (!k) return false;
+    if (k === 'stable_key' || k === 'stable_uid') return true;
+    return /(^|_)(id|uid|guid|hash|sha\d*)$/i.test(k);
+  }
+
   function scoreFieldForRole(schemaName, key, role) {
     const rows = rowsForSchema(schemaName);
     const st = valueStats(rows, key);
     if (!st.count) return -1;
+    if ((role === 'sysCode' || role === 'plmCode') && isOpaqueIdFieldName(key)) return -1;
     let score = st.count;
     if (role === 'sysMatchText') score += st.multi * 80 + st.textish * 45 + Math.min(35, st.avgLen) + crossPlmOverlapScore(key) * 180 - st.codeish * 45;
     else if (role === 'plmText') score += st.textish * 90 + Math.min(35, st.avgLen) - st.codeish * 70;
@@ -7990,7 +8010,7 @@ ${h.name}`, type:'requirement', detail:srcA };
   };
   normalizeReviewStoreInPlace();
   normalizeManualStoresInPlace();
-  matchLogic.version = 'lite-1.1';
+  matchLogic.version = 'lite-1.2';
 })();
 </script>
 
@@ -8007,7 +8027,7 @@ ${h.name}`, type:'requirement', detail:srcA };
 (() => {
   const RO_CRATE_CONTEXT = 'https://w3id.org/ro/crate/1.1/context';
   const RO_CRATE_CONFORMS = 'https://w3id.org/ro/crate/1.1';
-  const TOOL_VERSION = 'lite-1.1';
+  const TOOL_VERSION = 'lite-1.2';
   const STORAGE_KEY = 'v11_17_artifact_export_settings';
   const MiB = 1024 * 1024;
   const exportSettings = {
@@ -8377,7 +8397,7 @@ ${h.name}`, type:'requirement', detail:srcA };
   ['roCrateDatasetName','roCrateDescription','roCrateLicense','roCrateCreatorName','roCrateCreatorId'].forEach(id=>$(id)?.addEventListener('input',()=>{outputTextCache={};}));
 
   loadSettings();
-  matchLogic.version='lite-1.1';
+  matchLogic.version='lite-1.2';
   window.__liteRoCrate=Object.freeze({
     exportSettings, currentSettings,
     buildRoCrateMetadata, validateRoCratePackage, createZipBytes, safeZipBasename, uriPath,
