@@ -1,0 +1,113 @@
+{
+  "profile_name": "標準（章・節様式）+ HVACデモタグ辞書",
+  "display": {
+    "meta_field": "file_name",
+    "doc_fields": [
+      {
+        "field": "chapter_number",
+        "label": "章番号（例: 第1章）",
+        "style": "doc_number"
+      },
+      {
+        "field": "chapter_title",
+        "label": "章タイトル",
+        "style": "doc_title"
+      }
+    ],
+    "sections_field": "sections",
+    "section_number_field": "section_number",
+    "section_title_field": "section_title",
+    "content_field": "content"
+  },
+  "extraction": {
+    "doc_heading": {
+      "pattern": "^(第[\\s　]*[0-9０-９一二三四五六七八九十百]+[\\s　]*[章編])[\\s　]*(.*)$",
+      "fields": [
+        "chapter_number",
+        "chapter_title"
+      ]
+    },
+    "section_heading": {
+      "pattern": "^([0-9０-９]+(?:[.．][0-9０-９]+)+[.．]?|[0-9０-９]+[.．])[\\s　]*(.+)$",
+      "fields": [
+        "section_number",
+        "section_title"
+      ],
+      "max_title_length": 40
+    },
+    "heading_rules": [
+      {
+        "kind": "chapter",
+        "level": 1,
+        "priority": 100,
+        "pattern": "^(第[\\s　]*[0-9０-９一二三四五六七八九十百]+[\\s　]*[章編])[\\s　]*(.*)$",
+        "fields": [
+          "chapter_number",
+          "chapter_title"
+        ],
+        "max_title_length": 80
+      },
+      {
+        "kind": "section",
+        "level": 2,
+        "priority": 90,
+        "pattern": "^([0-9０-９]+(?:[.．][0-9０-９]+)+[.．]?|[0-9０-９]+[.．])[\\s　]*(.+)$",
+        "fields": [
+          "section_number",
+          "section_title"
+        ],
+        "max_title_length": 50
+      },
+      {
+        "kind": "section",
+        "level": 2,
+        "priority": 70,
+        "pattern": "^【(.+)】$",
+        "fields": [
+          "section_title"
+        ],
+        "max_title_length": 40
+      },
+      {
+        "kind": "section",
+        "level": 3,
+        "priority": 60,
+        "pattern": "^[■□●○◆◇][\\s　]*(.+)$",
+        "fields": [
+          "section_title"
+        ],
+        "max_title_length": 40
+      }
+    ],
+    "list_marker_pattern": "^(?:[・●○◎■□▪※＊*†‣▶►－‐–—]|[（(][0-9０-９a-zａ-ｚア-ヴｱ-ﾝ一二三四五六七八九十]+[)）]|[0-9０-９]+[)）]|[①-⑳]|[ア-ヴ][.．)）])[\\s　]*",
+    "unknown_value": "Unknown"
+  },
+  "schema": null,
+  "profile_id": "profile-C995932B",
+  "profile_version": "2.0",
+  "description": "仕様書PDF→JSON 変換・確認ツール用プロファイル HVACデモ用タグ辞書(使用温度/冷房能力/電源電圧/周波数/騒音/保守性)を追加登録済み。",
+  "compatible_schema_versions": [
+    "1.x",
+    "2.0"
+  ],
+  "normalization": {
+    "unicode": "NFKC",
+    "whitespace": "collapse"
+  },
+  "tag_policy": {
+    "mode": "controlled",
+    "vocabulary_id": "hvac-demo-tags",
+    "tag_vocabulary_version": "1.0",
+    "allow_free_input": false,
+    "allowed_tags": [
+      "使用温度",
+      "冷房能力",
+      "電源電圧",
+      "周波数",
+      "騒音",
+      "保守性"
+    ],
+    "tag_aliases": {},
+    "suggested_tags": []
+  }
+}

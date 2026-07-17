@@ -1,0 +1,96 @@
+{
+  "profile_name": "HVAC設計検討表(推奨4列+タグ辞書)",
+  "profile_version": "1.0.0",
+  "description": "設計項目/標準機種情報/顧客対応・検討内容/検討結果の4列のみをtrace_textに含め、HVACデモタグ辞書で自動タグ付けする様式プロファイル。",
+  "output": {
+    "mode": "trace",
+    "root_field": "records",
+    "preserve_unmapped": true,
+    "include_source": true,
+    "id_field": "trace_id",
+    "id_columns": [
+      "設計項目"
+    ],
+    "title_columns": [
+      "設計項目"
+    ],
+    "text_columns": [
+      "設計項目",
+      "標準機種情報",
+      "顧客対応・検討内容",
+      "検討結果"
+    ],
+    "category_column": "分類"
+  },
+  "columns": [],
+  "tag_policy": {
+    "mode": "controlled",
+    "vocabulary_id": "hvac-demo-tags",
+    "tag_vocabulary_version": "1.0",
+    "allow_free_input": false,
+    "allowed_tags": [
+      "使用温度",
+      "冷房能力",
+      "電源電圧",
+      "周波数",
+      "騒音",
+      "保守性"
+    ],
+    "rules": [
+      {
+        "tag": "使用温度",
+        "keywords": [
+          "温度"
+        ],
+        "fields": [],
+        "match": "OR"
+      },
+      {
+        "tag": "冷房能力",
+        "keywords": [
+          "冷房能力"
+        ],
+        "fields": [],
+        "match": "OR"
+      },
+      {
+        "tag": "電源電圧",
+        "keywords": [
+          "電源電圧",
+          "AC "
+        ],
+        "fields": [],
+        "match": "OR"
+      },
+      {
+        "tag": "周波数",
+        "keywords": [
+          "Hz",
+          "周波数"
+        ],
+        "fields": [],
+        "match": "OR"
+      },
+      {
+        "tag": "騒音",
+        "keywords": [
+          "騒音",
+          "dB"
+        ],
+        "fields": [],
+        "match": "OR"
+      },
+      {
+        "tag": "保守性",
+        "keywords": [
+          "保守"
+        ],
+        "fields": [],
+        "match": "OR"
+      }
+    ],
+    "suggested_tags": [],
+    "tag_aliases": {}
+  },
+  "schema": null
+}
