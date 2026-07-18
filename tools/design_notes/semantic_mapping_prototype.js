@@ -182,6 +182,21 @@ const ACTUAL_SEMANTICS_RULES = [
     match: (text, quantity, record) => (record.qualifiers || []).some(q => q.type === 'maximum') },
   { value: 'guaranteed_maximum', weight: 0.1, evidenceType: 'quantity_shape',
     match: (text, quantity) => isOneSidedUpper(quantity) },
+  // v2.18(8.21節): 「代表値」「平均値」「中央値」「最頻値」は、JIS Z 8101-1(統計－用語及び記号－
+  // 第1部)が定義する統計用語であり、いずれも複数の測定値から算出される要約値(代表値の意味での
+  // "measure of location")であって、単一の実測点(achieved_point)ではない。v2.10〜v2.13では
+  // これらを意図的にどちらの辞書にも加えず、achieved_point側の構造的根拠(点である、0.3)のみが
+  // 残る「未分類」の扱いとしていたが、これは「識別できていない」だけであり「安全に区別できて
+  // いる」わけではなかった(v2.13時点の残課題として明記済み)。v2.18では、これらの語を専用の
+  // 意味値aggregated_representative_valueとして明示的に識別する。集計値は個々のばらつきを
+  // 均してしまうため(平均が規格内でも、個々の実測値は規格外の可能性がある)、COMPARISON_MODE_
+  // DERIVATION_TABLEには意図的に追加せず、要求側とのペアからcomparisonModeを一切導出しない
+  // (v2.10でrequired_capability_domain×achieved_pointを安全側の理由で除外したのと同じ設計)。
+  { value: 'aggregated_representative_value', weight: 0.1, evidenceType: 'quantity_shape',
+    match: (text, quantity) => isGenuinePoint(quantity) },
+  { value: 'aggregated_representative_value', weight: 0.5, evidenceType: 'keyword',
+    match: (text, quantity) => isGenuinePoint(quantity) &&
+      hasUnnegatedKeywordMatch(text, /代表値|平均値|中央値|最頻値/) },
 ];
 
 // 条件節(role='condition')の意味候補。レビュー8節の対照テスト例に基づく最小限の語彙。
@@ -917,9 +932,19 @@ if (require.main === module) {
       // (point_in_region・確信度0.35＝形0.3+列根拠0.05)まで固定しておくと、将来の回帰原因を
       // 判別しやすくなる（要求がacceptable_regionの場合。中央値25℃はrequired_capability_domain
       // 側のため対象外）。
-      if (reqRecord === reqNoise || reqRecord === reqVoltage) {
+      // v2.18(8.21節): 「代表値」はJIS Z 8101統計用語として明示的に識別されるようになり、
+      // actCの最上位候補がachieved_point(0.35)からaggregated_representative_value(0.6)へ
+      // 変わった。この値はCOMPARISON_MODE_DERIVATION_TABLEに未登録のため、modeCandidate自体が
+      // 導出されなくなる(以前は「導出されるが確信度不足で非適用」、今は「そもそも導出しない」
+      // という、より積極的な安全設計に変わった。「計画値」はJIS統計用語ではないため対象外で
+      // 従来どおり)。
+      if (reqRecord === reqVoltage) {
         check(`必須修正2(再指摘・固定値確認): 「${label}」のmodeCandidateはpoint_in_region・確信度0.35(検討結果列根拠込み)のまま導出される`,
           modeCandidate?.value === 'point_in_region' && modeCandidate?.confidence === 0.35);
+      }
+      if (reqRecord === reqNoise) {
+        check(`統計語の安全設計(v2.18): 「${label}」はaggregated_representative_valueが最上位候補になり、comparisonModeが導出されない`,
+          actC[0].value === 'aggregated_representative_value' && (modeCandidate === null || modeCandidate === undefined));
       }
     }
   }
@@ -982,14 +1007,29 @@ if (require.main === module) {
     }
   }
   {
-    // 統計・代表値系の語(代表値/中央値/平均値)は、JIS統計用語上「複数の測定を要約した値」
-    // であり、単一の達成値と同一視できないため、意図的にどちらの辞書にも加えていない。
-    // 未分類のまま(構造的根拠のみ、確信度0.3)に留まることを確認する。
-    for (const t of ['代表値58 dB(A)', '中央値25 ℃', '平均値25 ℃']) {
+    // v2.18(8.21節): 統計・代表値系の語(代表値/中央値/平均値/最頻値)は、JIS Z 8101-1の統計用語
+    // 定義に基づき、achieved_pointとは別のaggregated_representative_value候補として明示的に
+    // 識別されるようになった(v2.17までは未分類のまま、achieved_pointの構造的根拠0.3のみが
+    // 残っていた)。確信度0.6(構造0.1+キーワード0.5)で最上位候補になることを確認する。
+    for (const t of ['代表値58 dB(A)', '中央値25 ℃', '平均値25 ℃', '最頻値25 ℃']) {
       const r = extractQuantities(t).find(x => x.quantity.kind === 'interval');
       const c = generateIntervalSemanticsCandidates(r, { side: 'B', nearbyText: t });
-      check(`統計語は未分類のまま: 「${t}」はachieved_point:0.30(構造的根拠のみ)に留まる`,
-        c[0].value === 'achieved_point' && c[0].confidence === 0.3);
+      check(`統計語の明示的識別(v2.18): 「${t}」はaggregated_representative_value:0.60が最上位候補になる`,
+        c[0].value === 'aggregated_representative_value' && Math.abs(c[0].confidence - 0.6) < 1e-9);
+    }
+    // 安全設計の確認: aggregated_representative_valueはCOMPARISON_MODE_DERIVATION_TABLEに
+    // 意図的に加えていないため、要求側とペアにしてもcomparisonModeは導出されない
+    // (「平均が規格内でも個々の実測値は規格外の可能性がある」という統計的な理由による)。
+    {
+      const reqText = '装置は0 ℃から50 ℃の環境で正常に運転できること。';
+      const reqRecord = extractQuantities(reqText)[0];
+      const reqC = generateIntervalSemanticsCandidates(reqRecord, { side: 'A', nearbyText: reqText });
+      const actText = '平均値25 ℃';
+      const actRecord = extractQuantities(actText).find(x => x.quantity.kind === 'interval');
+      const actC = generateIntervalSemanticsCandidates(actRecord, { side: 'B', nearbyText: actText });
+      const modeCandidate = deriveComparisonModeCandidate(reqC, actC);
+      check('安全設計(v2.18): aggregated_representative_valueは要求側とのペアでcomparisonModeを導出しない',
+        modeCandidate === null || modeCandidate === undefined);
     }
   }
 
