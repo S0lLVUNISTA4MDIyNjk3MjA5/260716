@@ -40,7 +40,14 @@
 // JIS計測用語(JIS Z 8103)・検査成績書の実務慣行をインターネット調査し、肯定語(検査結果/
 // 試験結果/実績値/成績値)と否定語(規格値/基準値/目標値/設計値)を語彙として追加した。
 // 代表値・中央値・平均値はJIS統計用語上「複数の測定を要約した値」であり単一の達成値と
-// 同一視できないため、意図的にどちらの辞書にも加えていない。詳細は8.8〜8.12節を参照。
+// 同一視できないため、意図的にどちらの辞書にも加えていない。v2.14では、キーワード一致を
+// セル内の対象数量の節へ限定するlocalClauseText()を追加したが、これに2件の不具合が
+// 見つかりv2.15で対応した。(1) 位置特定にnearbyText.indexOf()を使っていたため、同一表記の
+// 数量がセル内に複数回現れると常に最初の出現に解決されていた不具合。工程4a側のスキーマ
+// (source_span)追加までは行わず、出現番号(occurrenceIndex)を渡す暫定策で対応した。
+// (2) 節分割を要求側(A側)にも適用していたため、「電源電圧220V、50Hzとすること」のような
+// 複数数量が文末の共通述語を共有する要求文で、後半の述語が節分割により失われていた不具合。
+// 節分割を実仕様側(B側、条件節を除く)のみに限定して解決した。詳細は8.8〜8.13節を参照。
 
 const { extractQuantities, coverageGap, isGenuinePoint, isEmptyInterval } = require('./quantity_extraction_prototype.js');
 
@@ -208,11 +215,30 @@ function scoreSemantics(rules, text, record, ctx) {
 // 除外している）。record.source_textがnearbyText内に見つからない場合は、安全側として
 // nearbyText全体にフォールバックする(呼び出し側がnearbyTextに数量の原文を含めない
 // テストケース等、位置特定できない場合を壊さないため)。
+//
+// v2.15(再レビュー必須修正1): 工程4aの抽出結果(quantity_extraction_prototype.jsの出力)は
+// 数量の原文内オフセット(source_span)を公開していないため、v2.14では`nearbyText.indexOf(
+// sourceText)`で位置を復元していた。これは同じ表記の数量が同一セルに複数回現れる場合
+// (「規格値12kW、試験結果12kW」等)、常に最初の出現位置に解決されてしまう不具合があった
+// (レビューで再現・確認)。工程4a側のスキーマ変更(source_spanの追加)は、v2.8で一旦固定と
+// 評価された比較エンジンの前提を再び動かすことになり影響範囲が大きいため見送り、レビューが
+// 提示した暫定策（同一文字列の出現番号を渡す）を採用した。呼び出し側(buildPropertyCandidateRecords)
+// が、同じsource_textを持つ数量が何番目の出現かを数え、ctx.occurrenceIndexとして渡す。
 const CLAUSE_DELIMITER_PATTERN = /、|。|，|(?<!\d),(?!\d)/g;
 
-function localClauseText(nearbyText, sourceText) {
+// nearbyText内で、sourceTextのn番目(0始まり)の出現位置を返す。見つからなければ-1。
+function findNthIndexOf(haystack, needle, n) {
+  let idx = -1;
+  for (let i = 0; i <= n; i++) {
+    idx = haystack.indexOf(needle, idx + 1);
+    if (idx === -1) return -1;
+  }
+  return idx;
+}
+
+function localClauseText(nearbyText, sourceText, occurrenceIndex = 0) {
   if (!nearbyText || !sourceText) return nearbyText || '';
-  const idx = nearbyText.indexOf(sourceText);
+  const idx = findNthIndexOf(nearbyText, sourceText, occurrenceIndex);
   if (idx === -1) return nearbyText;
   const boundaries = [0];
   let m;
@@ -242,9 +268,17 @@ function localClauseText(nearbyText, sourceText) {
   return nearbyText;
 }
 
+// v2.15(再レビュー必須修正2): 節への分割は、要求側(側A)では「電源電圧220V、50Hzとすること」
+// のように、複数の数量が文末の共通述語(「〜とすること」)を共有する構造を壊す
+// (実際に220Vの局所節が「定格電源は三相AC 220V、」となり、「とすること」を失うことを確認)。
+// 今回解決すべき誤伝播は主に実仕様側(側B)の達成値・否定語判定であるため、節分割は側Bかつ
+// 条件節でない場合のみに限定し、要求側は従来どおり全文を判定対象にする(安全側の暫定対応。
+// 要求側で複数数量が異なる述語を持つケースへの対応は将来課題とする)。
 function generateIntervalSemanticsCandidates(record, ctx) {
   const fullText = ctx.nearbyText || record.source_text || '';
-  const text = localClauseText(fullText, record.source_text || '');
+  const text = (ctx.side === 'B' && !ctx.isConditionValue)
+    ? localClauseText(fullText, record.source_text || '', ctx.occurrenceIndex || 0)
+    : fullText;
   if (ctx.isConditionValue) return scoreSemantics(CONDITION_SEMANTICS_RULES, text, record, ctx);
   if (ctx.side === 'A') return scoreSemantics(REQUIREMENT_SEMANTICS_RULES, text, record, ctx);
   if (ctx.side === 'B') return scoreSemantics(ACTUAL_SEMANTICS_RULES, text, record, ctx);
@@ -449,14 +483,20 @@ function normalizeConditionAsRecord(cc) {
 function buildPropertyCandidateRecords(text, ctx) {
   const quantities = extractQuantities(text);
   const out = [];
+  // v2.15(再レビュー必須修正1): 同じsource_textの数量がセル内に複数回出現する場合、それぞれが
+  // 何番目の出現かを事前に数えておく(nearbyText.indexOf()が常に最初の出現に解決してしまう
+  // 不具合への対応。localClauseText()へoccurrenceIndexとして渡す)。
+  const occurrenceCounts = new Map();
   quantities.forEach((q, idx) => {
+    const occurrenceIndex = occurrenceCounts.get(q.source_text) || 0;
+    occurrenceCounts.set(q.source_text, occurrenceIndex + 1);
     out.push({
       source: ctx.source,
       quantity_ref: { index: idx, source_text: q.source_text, isCondition: false }, // 参照情報(indexとsource_textで元quantityへ戻れる)
       quantity_record: q, // 工程4aの構造化オブジェクトをそのまま保持(文字列化しない)
       property_candidates: generatePropertyCandidates(q, ctx),
       role_candidate: inferRole({ ...ctx, isConditionValue: false }),
-      interval_semantics_candidates: generateIntervalSemanticsCandidates(q, { ...ctx, isConditionValue: false }),
+      interval_semantics_candidates: generateIntervalSemanticsCandidates(q, { ...ctx, isConditionValue: false, occurrenceIndex }),
       confirmed: false, // 候補のみ。人間が確認するまでfalseのまま
     });
     // 条件候補(condition_candidates)も、それ自体が別の意味対応付け対象になり得るため候補化する
@@ -953,6 +993,37 @@ if (require.main === module) {
       check(`肯定語拡張(推奨修正・pipeline確認): 「${actText}」はauto_applicable:trueまで到達する`,
         evalResult.applicable === true);
     }
+  }
+
+  // ── v2.15: 再レビュー必須修正1の回帰テスト(同一表記の数量が複数回出現する場合の位置特定) ──
+  {
+    const text = '規格値12kW、試験結果12kW';
+    const records = extractQuantities(text); // [12kW(1個目), 12kW(2個目)]
+    const c1st = generateIntervalSemanticsCandidates(records[0], { side: 'B', nearbyText: text, occurrenceIndex: 0 });
+    const c2nd = generateIntervalSemanticsCandidates(records[1], { side: 'B', nearbyText: text, occurrenceIndex: 1 });
+    check('必須修正1(v2.15): 「規格値12kW、試験結果12kW」で1個目の12kWは否定根拠(規格値)を受け取る(unknownが最上位)',
+      c1st[0].value === 'unknown');
+    check('必須修正1(v2.15): 「規格値12kW、試験結果12kW」で2個目の12kWは肯定根拠(試験結果)を受け取る(0.70)',
+      c2nd[0].value === 'achieved_point' && c2nd[0].confidence === 0.7);
+    // buildPropertyCandidateRecords()経由でも同じ結果になることを確認する(occurrenceIndexが
+    // 呼び出し側で正しく自動計算されることの確認)。
+    const recs = buildPropertyCandidateRecords(text, { side: 'B', source: 'x', tags: [], nearbyText: text });
+    check('必須修正1(v2.15): buildPropertyCandidateRecords()経由でもoccurrenceIndexが正しく計算される',
+      recs[0].interval_semantics_candidates[0].value === 'unknown' &&
+      recs[1].interval_semantics_candidates[0].value === 'achieved_point' &&
+      recs[1].interval_semantics_candidates[0].confidence === 0.7);
+  }
+
+  // ── v2.15: 再レビュー必須修正2の回帰テスト(要求側での共有述語の保持) ──
+  {
+    const reqText = '定格電源は三相AC 220 V、50 Hzとすること。';
+    const records = extractQuantities(reqText);
+    const c220 = generateIntervalSemanticsCandidates(records.find(r => r.source_text === '220 V'), { side: 'A', nearbyText: reqText });
+    const c50hz = generateIntervalSemanticsCandidates(records.find(r => r.source_text === '50 Hz'), { side: 'A', nearbyText: reqText });
+    check('必須修正2(v2.15): 「定格電源は三相AC 220V、50Hzとすること」で220Vが文末の共通述語「とすること」を参照できる(acceptable_region:0.45)',
+      c220[0].value === 'acceptable_region' && Math.abs(c220[0].confidence - 0.45) < 1e-9);
+    check('必須修正2(v2.15): 同じ要求文で50Hzも同じ確信度になる(要求側は節分割しないため、どちらも全文を参照する)',
+      c50hz[0].value === 'acceptable_region' && Math.abs(c50hz[0].confidence - 0.45) < 1e-9);
   }
 
   assertions.forEach(a => console.log((a.pass ? '[OK] ' : '[FAIL] ') + a.name));
