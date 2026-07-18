@@ -101,9 +101,11 @@ const ACTUAL_SEMANTICS_RULES = [
   // 「試験」単体（否定根拠の語彙にある）とは意味が異なるため、後述のNEGATIVE_KEYWORD_RULESの
   // 「試験」パターンには「試験結果」を含めないよう除外している。「測定結果」「測定値」は
   // 既存のoutcome_range(変動・ばらつきの意味)の語彙と重複するため、ここには含めない。
+  // v2.14: 「試験の結果」「検討の結果」のように「の」を挟む自然な表現も一致するよう、
+  // 「試験」「検査」「検討」いずれも(?:の)?を挟めるパターンへ統一した。
   { value: 'achieved_point', weight: 0.4, evidenceType: 'keyword',
     match: (text, quantity) => isGenuinePoint(quantity) &&
-      /実測|達成値|検討の結果|測定した結果|試験結果|検査結果|実績値|成績値/.test(text) },
+      /実測|達成値|検討(?:の)?結果|測定した結果|試験(?:の)?結果|検査(?:の)?結果|実績値|成績値/.test(text) },
   { value: 'capability_domain', weight: 0.55, evidenceType: 'keyword',
     match: (text, quantity) => isTwoSidedRange(quantity) && /使用可能|対応可能|運転可能/.test(text) },
   { value: 'capability_domain', weight: 0.1, evidenceType: 'quantity_shape',
@@ -142,10 +144,13 @@ const CONDITION_SEMANTICS_RULES = [
 // v2.13(8.12節): JIS計測用語・検査成績書の実務用語調査により、「規格値」「基準値」
 // 「目標値」「設計値」も、実測値と混同されやすい非達成値の語として追加した(規格値＝要求
 // 許容範囲、目標値＝開発時点の目安、設計値＝理論上の理想値であり、いずれも実測結果ではない)。
-// 「試験」は「試験結果」（達成値を示す肯定語、上記ACTUAL_SEMANTICS_RULES参照）を否定しない
-// よう、否定先読みで除外した。
+// 「試験」は「試験結果」「試験の結果」（達成値を示す肯定語、上記ACTUAL_SEMANTICS_RULES参照）を
+// 否定しないよう、否定先読みで除外している。v2.13時点では「試験(?!結果)」のみで「試験の結果」
+// (「の」を挟む自然な表現)を除外できていなかった不具合を、v2.14で「試験(?!(?:の)?結果)」へ
+// 修正した(検査成績書の実務調査は最初の不具合修正の際に参照した二次資料に基づくもので、
+// 「試験の結果」という表記自体の見落としはレビューで指摘された)。
 const NEGATIVE_KEYWORD_RULES = [
-  { pattern: /参考値|目安|概算|設定|公称|試験(?!結果)|規格値|基準値|目標値|設計値/, weight: -0.4, label: '達成値との混同に注意を要する語' },
+  { pattern: /参考値|目安|概算|設定|公称|試験(?!(?:の)?結果)|規格値|基準値|目標値|設計値/, weight: -0.4, label: '達成値との混同に注意を要する語' },
 ];
 
 const UNKNOWN_BASELINE_CONFIDENCE = 0.15;
@@ -194,8 +199,52 @@ function scoreSemantics(rules, text, record, ctx) {
 }
 
 // ── 1レコード分のinterval_semantics候補を生成する ──
+// v2.14(レビュー必須修正1): セル内に複数の数量が含まれる場合、キーワード一致を数量ごとに
+// 同じ節(文の一部)に限定する。以前はctx.nearbyText全体に対して正規表現を適用していたため、
+// 「規格値12kW、試験結果12.5kW」のようなセルで、別の数量に付いた語（否定語・肯定語問わず）が
+// 誤って伝播していた（レビューで実際に再現・確認）。恒久的な構文解析までは行わず、句読点・
+// 読点・全角カンマで区切った「節」を、対象数量の位置を含む区間として簡易的に切り出す
+// 暫定策を採用した（桁区切りカンマ「1,500」を誤って区切らないよう、数字に挟まれたカンマは
+// 除外している）。record.source_textがnearbyText内に見つからない場合は、安全側として
+// nearbyText全体にフォールバックする(呼び出し側がnearbyTextに数量の原文を含めない
+// テストケース等、位置特定できない場合を壊さないため)。
+const CLAUSE_DELIMITER_PATTERN = /、|。|，|(?<!\d),(?!\d)/g;
+
+function localClauseText(nearbyText, sourceText) {
+  if (!nearbyText || !sourceText) return nearbyText || '';
+  const idx = nearbyText.indexOf(sourceText);
+  if (idx === -1) return nearbyText;
+  const boundaries = [0];
+  let m;
+  CLAUSE_DELIMITER_PATTERN.lastIndex = 0;
+  while ((m = CLAUSE_DELIMITER_PATTERN.exec(nearbyText))) {
+    boundaries.push(m.index + m[0].length);
+  }
+  boundaries.push(nearbyText.length);
+  for (let i = 0; i < boundaries.length - 1; i++) {
+    let segStart = boundaries[i];
+    const segEnd = boundaries[i + 1];
+    if (idx < segStart || idx >= segEnd) continue;
+    // 「試験の結果、58 dB(A)」のように、数量そのものを含まない前置きの節（「〜の結果、」等）は
+    // 対象数量の節へ連結する。前の節に数字が一切含まれない場合に限り連結することで、
+    // 「規格値12kW、試験結果12.5kW」のように前の節が別の数量を持つ場合は連結しない
+    // (それぞれの数量が別の語を誤って受け取らないようにする)。
+    let j = i - 1;
+    while (j >= 0) {
+      const prevStart = boundaries[j], prevEnd = boundaries[j + 1];
+      const prevSeg = nearbyText.slice(prevStart, prevEnd);
+      if (/\d/.test(prevSeg)) break; // 前の節に数字(別の数量)があれば連結しない
+      segStart = prevStart;
+      j--;
+    }
+    return nearbyText.slice(segStart, segEnd);
+  }
+  return nearbyText;
+}
+
 function generateIntervalSemanticsCandidates(record, ctx) {
-  const text = ctx.nearbyText || record.source_text || '';
+  const fullText = ctx.nearbyText || record.source_text || '';
+  const text = localClauseText(fullText, record.source_text || '');
   if (ctx.isConditionValue) return scoreSemantics(CONDITION_SEMANTICS_RULES, text, record, ctx);
   if (ctx.side === 'A') return scoreSemantics(REQUIREMENT_SEMANTICS_RULES, text, record, ctx);
   if (ctx.side === 'B') return scoreSemantics(ACTUAL_SEMANTICS_RULES, text, record, ctx);
@@ -842,6 +891,67 @@ if (require.main === module) {
       const c = generateIntervalSemanticsCandidates(r, { side: 'B', nearbyText: t });
       check(`統計語は未分類のまま: 「${t}」はachieved_point:0.30(構造的根拠のみ)に留まる`,
         c[0].value === 'achieved_point' && c[0].confidence === 0.3);
+    }
+  }
+
+  // ── v2.14: 再レビュー必須修正1の回帰テスト(キーワードのセル内誤伝播) ──
+  // セル内に複数の数量が含まれる場合、キーワード一致を数量ごとの節(句読点で区切った区間)へ
+  // 限定する。以前はctx.nearbyText全体に対して正規表現を適用していたため、別の数量に付いた
+  // 語が誤って伝播していた(レビューで再現・確認)。
+  {
+    const text = '規格値12kW、試験結果12.5kW';
+    const records = extractQuantities(text);
+    const c12 = generateIntervalSemanticsCandidates(records.find(r => r.source_text === '12kW'), { side: 'B', nearbyText: text });
+    const c125 = generateIntervalSemanticsCandidates(records.find(r => r.source_text === '12.5kW'), { side: 'B', nearbyText: text });
+    check('必須修正1(再レビュー): 「規格値12kW、試験結果12.5kW」で12kWは否定根拠(規格値)のみを受け取る(unknownが最上位)',
+      c12[0].value === 'unknown');
+    check('必須修正1(再レビュー): 「規格値12kW、試験結果12.5kW」で12.5kWは肯定根拠(試験結果)のみを受け取る(0.70)',
+      c125[0].value === 'achieved_point' && c125[0].confidence === 0.7);
+  }
+  {
+    const text = '試験結果12.5kW、設定温度25℃';
+    const records = extractQuantities(text);
+    const c125 = generateIntervalSemanticsCandidates(records.find(r => r.source_text === '12.5kW'), { side: 'B', nearbyText: text });
+    const c25 = generateIntervalSemanticsCandidates(records.find(r => r.source_text === '25℃'), { side: 'B', nearbyText: text });
+    check('必須修正1(再レビュー): 「試験結果12.5kW、設定温度25℃」で12.5kWだけachieved_point(0.70)へ昇格する',
+      c125[0].value === 'achieved_point' && c125[0].confidence === 0.7);
+    check('必須修正1(再レビュー): 「試験結果12.5kW、設定温度25℃」で25℃には「試験結果」が伝播しない(unknownが最上位)',
+      c25[0].value === 'unknown');
+  }
+
+  // ── v2.14: 再レビュー必須修正2の回帰テスト(「〜の結果」パターン) ──
+  {
+    const casesResult = [
+      ['試験結果58dB(A)', '試験結果は58 dB(A)'],
+      ['試験の結果58dB(A)', '試験の結果、58 dB(A)'],
+      ['検査結果58dB(A)', '検査結果は58 dB(A)'],
+      ['検査の結果58dB(A)', '検査の結果、58 dB(A)'],
+    ];
+    for (const [label, text] of casesResult) {
+      const r = extractQuantities(text).find(x => x.quantity.kind === 'interval');
+      const c = generateIntervalSemanticsCandidates(r, { side: 'B', nearbyText: text });
+      check(`必須修正2(再レビュー): 「${label}」はachieved_point:0.70になる(「の」を挟んでも肯定語として機能する)`,
+        c[0].value === 'achieved_point' && c[0].confidence === 0.7);
+    }
+  }
+
+  // ── v2.14: 推奨修正(肯定語拡張4件をevaluateAutoApplicable()まで通す) ──
+  {
+    const reqCases = [
+      ['検査結果は58 dB(A)', '騒音は60 dB(A)以下とすること'],
+      ['試験結果は220 V', '定格電源は220 Vとすること。'],
+      ['実績値は12.5 kW', '冷房能力12 kW以上を確保すること。'],
+      ['成績値は58 dB(A)', '騒音は60 dB(A)以下とすること'],
+    ];
+    for (const [actText, reqText] of reqCases) {
+      const reqRecord = extractQuantities(reqText)[0];
+      const actRecord = extractQuantities(actText).find(x => x.quantity.kind === 'interval');
+      const reqC = generateIntervalSemanticsCandidates(reqRecord, { side: 'A', nearbyText: reqText });
+      const actC = generateIntervalSemanticsCandidates(actRecord, { side: 'B', nearbyText: actText });
+      const modeCandidate = deriveComparisonModeCandidate(reqC, actC);
+      const evalResult = evaluateAutoApplicable({ modeCandidate, requirementCandidates: reqC, actualCandidates: actC, propertyConfidence: 0.99, extractionWarningsCount: 0 });
+      check(`肯定語拡張(推奨修正・pipeline確認): 「${actText}」はauto_applicable:trueまで到達する`,
+        evalResult.applicable === true);
     }
   }
 
