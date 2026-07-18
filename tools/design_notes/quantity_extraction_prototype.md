@@ -4,6 +4,7 @@
 **作成日:** 2026-07-17
 **関連文書:** `tools/design_notes/abstraction_levels.md`（6工程モデル。本文書は工程4a「単一記録内での数量抽出」の具体化）
 **付属ファイル:** `tools/design_notes/quantity_extraction_prototype.js`（Node.js、依存ライブラリなし。`node quantity_extraction_prototype.js`で実行可能）
+**レビュー記録:** `tools/design_notes/quantity_extraction_prototype_review.md`（本体統合前の必須修正、推奨スキーマ、追加テスト、完了条件）
 
 ---
 
