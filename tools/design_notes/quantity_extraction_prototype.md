@@ -4,7 +4,7 @@
 **版:** 2.1（v2レビュー対応に加え、境界包含を考慮した被覆判定と数量修飾語の保持を追加）
 **作成日:** 2026-07-17（改訂: 2026-07-18）
 **関連文書:** `tools/design_notes/abstraction_levels.md`（6工程モデル。本文書は工程4a「単一記録内での数量抽出」の具体化）
-**付属ファイル:** `tools/design_notes/quantity_extraction_prototype.js`（Node.js、依存ライブラリなし。`node quantity_extraction_prototype.js`で実行可能。HVACサンプル抽出結果・工程5デモ・レビュー提示の境界/失敗系テスト21件・完了条件アサーション18件を出力する）
+**付属ファイル:** `tools/design_notes/quantity_extraction_prototype.js`（Node.js、依存ライブラリなし。`node quantity_extraction_prototype.js`で実行可能。HVACサンプル抽出結果・工程5デモ・レビュー提示の境界/失敗系テスト21件・完了条件アサーション23件を出力する）
 **レビュー記録:** `tools/design_notes/quantity_extraction_prototype_review.md`（本体統合前の必須修正、推奨スキーマ、追加テスト、完了条件。**対応状況は同文書の「対応記録」節を参照**）
 
 ---
@@ -35,6 +35,7 @@
     selection_semantics: "unknown",  // alternativesの意味(択一/両対応等)は確定しない
   },
   unit: { source: "℃", canonical: "degC", dimension: "temperature" },
+  qualifiers: [{ type: "approximate" | "maximum" | "minimum" | "nominal", source_text: "約" }], // あれば
   context: {
     property: null, subject: null, state: null,   // 工程3(意味対応付け)が埋める領域。本工程では確定しない
     tokens: ["AC", "三相"],           // 周辺語(定格/交流/直流等)をそのまま保持
