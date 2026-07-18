@@ -21,10 +21,19 @@
 // 安全に動かせない」という、レビューの最終的な結論を実データで裏付けている。
 // 詳細は quantity_extraction_prototype.md 5.8〜5.9節、quantity_extraction_prototype_review.md
 // 0.4〜0.5節を参照。
+//
+// v2.9でinterval_semantics候補生成に着手した後、外部レビューで2件の必須修正を受けv2.10で対応した。
+//   (1) required_capability_domain(要求は対応可能領域全体を求める) × achieved_point(実仕様は
+//       単一の達成値)をpoint_in_regionへ対応させていた誤り。1点が範囲内にあることは、その範囲
+//       全域への対応を証明しない。この組み合わせは導出規則なしに変更した。
+//   (2) 「B側(実仕様側)の点である」ことだけでachieved_pointがほぼ自動確定(確信度0.6)していた
+//       問題。設定値・公称値・試験条件・参考値との区別がつかないため、役割根拠の重みを削減し、
+//       「設定」「公称」「試験」を否定根拠の語彙へ追加した。
+// 詳細は8.8節を参照。
 
 const { extractQuantities, coverageGap, isGenuinePoint, isEmptyInterval } = require('./quantity_extraction_prototype.js');
 
-// ── interval_semantics 候補生成(v2.9で着手) ──
+// ── interval_semantics 候補生成(v2.9で着手、v2.10で必須修正2件を反映) ──
 // 区間の「形」(点/片側/両側)だけでは、その区間が何を意味するかを一意に決定できない
 // (quantity_extraction_prototype_review.md 0.4〜0.7節のレビュー指摘、および今回のレビューで
 // 明示的に依頼された設計条件)。役割(要求/実仕様)・周辺語・数量の形・修飾語・否定語を
@@ -55,7 +64,11 @@ const REQUIREMENT_SEMANTICS_RULES = [
 const ACTUAL_SEMANTICS_RULES = [
   { value: 'achieved_point', weight: 0.3, evidenceType: 'quantity_shape',
     match: (text, quantity) => isGenuinePoint(quantity) && !text.includes('±') },
-  { value: 'achieved_point', weight: 0.3, evidenceType: 'source_role',
+  // v2.10: レビュー指摘により0.3→0.15へ減衰。「B側(実仕様側)である」ことは役割を表すだけで、
+  // その点が達成値なのか設定値・公称値・試験条件・代表値なのかを識別する独立根拠にはならない。
+  // 「点である」根拠と合わせても、キーワード等の裏付けがない場合は自動適用の閾値に届かない
+  // 水準へ抑えた(8.4節のauto_applicable判定を参照)。
+  { value: 'achieved_point', weight: 0.15, evidenceType: 'source_role',
     match: (text, quantity, record, ctx) => isGenuinePoint(quantity) && ctx.side === 'B' },
   { value: 'capability_domain', weight: 0.55, evidenceType: 'keyword',
     match: (text, quantity) => isTwoSidedRange(quantity) && /使用可能|対応可能|運転可能/.test(text) },
@@ -88,14 +101,23 @@ const CONDITION_SEMANTICS_RULES = [
 ];
 
 // 否定根拠: どの候補にも一律に確信度を下げる方向で働く(特定候補だけを狙い撃ちしない)。
+// v2.10: レビュー指摘により「設定」「公称」「試験」を追加。これらは「実仕様側の点＝達成値」
+// という既定の解釈に疑問を投げかける語であり(設定値・公称値・試験条件は、必ずしも
+// 実測された達成値ではない)、参考値・目安と同じ性質の否定根拠として扱う。重みも
+// -0.3→-0.4へ強化し、「参考値58dB(A)」のようなケースでunknownと確実に差が付くようにした。
 const NEGATIVE_KEYWORD_RULES = [
-  { pattern: /参考値|目安|概算/, weight: -0.3, label: '参考値・目安を示す語' },
+  { pattern: /参考値|目安|概算|設定|公称|試験/, weight: -0.4, label: '達成値との混同に注意を要する語' },
 ];
 
 const UNKNOWN_BASELINE_CONFIDENCE = 0.15;
 
 // ルール群を1レコードへ適用し、根拠付きの候補配列(確信度降順)を返す。
 // 候補は複数保持する(単一候補にすると代替解釈と曖昧性の情報が失われるというレビュー指摘に対応)。
+//
+// 【重要】ここでの`confidence`は、ルール重みの単純加算値であり、統計的に校正された確率ではない
+// (レビュー推奨修正4)。本プロトタイプでは検証用の相対スコアとして扱い、閾値との比較にのみ使う。
+// 本体統合時は、名称を`score`へ改める、または`{score, score_model, calibrated:false}`のような
+// 構造へ分離することを検討する(詳細はsemantic_mapping_prototype.md 8.8節参照)。
 function scoreSemantics(rules, text, record, ctx) {
   const quantity = record.quantity;
   const shortText = text.length > 80 ? text.slice(0, 80) + '…' : text;
@@ -109,9 +131,13 @@ function scoreSemantics(rules, text, record, ctx) {
   for (const rule of rules) {
     if (rule.match(text, quantity, record, ctx)) bump(rule.value, rule.weight, rule.evidenceType, 'supports');
   }
-  for (const neg of NEGATIVE_KEYWORD_RULES) {
-    if (neg.pattern.test(text)) {
-      for (const value of [...scores.keys()]) bump(value, neg.weight, 'negative_keyword', 'opposes');
+  // 条件節(role='condition')では「試験」「測定」がtest_conditionの正の根拠として使われるため、
+  // 実仕様側向けの否定根拠(達成値との混同注意語)はここでは適用しない。
+  if (!ctx.isConditionValue) {
+    for (const neg of NEGATIVE_KEYWORD_RULES) {
+      if (neg.pattern.test(text)) {
+        for (const value of [...scores.keys()]) bump(value, neg.weight, 'negative_keyword', 'opposes');
+      }
     }
   }
   if (!scores.has('unknown')) {
@@ -138,9 +164,16 @@ function generateIntervalSemanticsCandidates(record, ctx) {
 // ── 要求側semanticsと実仕様側semanticsの組み合わせから、comparisonMode候補を導出する ──
 // 単一レコードだけからcomparisonModeを決めない(レビュー指摘)。未定義の組み合わせや
 // 片方でもunknownの場合は導出しない(推測しない)。
+//
+// v2.10: レビュー指摘により、required_capability_domain × achieved_point の対応
+// (point_in_region)を削除した。要求が「対応可能領域全体」を求めている(例:「0〜50℃で
+// 運転できること」)のに対し、実仕様が単一の達成値(例:「25℃」)しかない場合、その1点が
+// 要求範囲内にあっても、要求範囲全域に対応できることの証明にはならない。この組み合わせは
+// 当面「導出規則なし」とし、comparisonMode候補を返さない(comparable:falseのまま要確認とする)。
+// acceptable_region × achieved_point (「騒音60dB以下」に対する「58dB」等、達成値が
+// 許容範囲内かを問う関係)は、この問題を持たないため引き続きpoint_in_regionを対応させる。
 const COMPARISON_MODE_DERIVATION_TABLE = [
   { requirement: 'acceptable_region', actual: 'achieved_point', mode: 'point_in_region' },
-  { requirement: 'required_capability_domain', actual: 'achieved_point', mode: 'point_in_region' },
   { requirement: 'required_capability_domain', actual: 'capability_domain', mode: 'actual_covers_requirement' },
   { requirement: 'acceptable_region', actual: 'outcome_range', mode: 'requirement_covers_actual' },
   { requirement: 'acceptable_region', actual: 'guaranteed_minimum', mode: 'requirement_covers_actual' },
@@ -621,6 +654,44 @@ if (require.main === module) {
       const evalResult = evaluateAutoApplicable({ modeCandidate, requirementCandidates: reqC, actualCandidates: actC, propertyConfidence: 0.99, extractionWarningsCount: 0 });
       return modeCandidate === null && evalResult.applicable === false;
     })());
+
+  // ── v2.10: 外部レビュー必須修正1の回帰テスト ──
+  // required_capability_domain(要求が対応可能領域全体を求める) × achieved_point(実仕様は
+  // 単一の達成値)は、point_in_regionへ対応させてはいけない。「0~50℃で運転できること」という
+  // 要求に対し「25℃」という1点の実仕様は、その1点で運転できることを示すだけで、要求範囲
+  // 全域への対応を証明しない。この組み合わせは導出規則なしとし、要確認のまま留める。
+  {
+    const reqText = '装置は0 ℃から50 ℃の環境で正常に運転できること。';
+    const actText = '使用温度は25 ℃';
+    const reqRecord = extractQuantities(reqText)[0];
+    const actRecord = extractQuantities(actText)[0];
+    const reqC = generateIntervalSemanticsCandidates(reqRecord, { side: 'A', nearbyText: reqText });
+    const actC = generateIntervalSemanticsCandidates(actRecord, { side: 'B', nearbyText: actText });
+    check('必須修正1: 要求側がrequired_capability_domainと判定される(「運転できること」)',
+      reqC[0].value === 'required_capability_domain');
+    check('必須修正1: 実仕様側がachieved_pointと判定される(単一の点)',
+      actC[0].value === 'achieved_point');
+    const modeCandidate = deriveComparisonModeCandidate(reqC, actC);
+    check('必須修正1: required_capability_domain×achieved_pointはcomparisonMode候補を導出しない(point_in_regionにしない)',
+      modeCandidate === null);
+    const evalResult = evaluateAutoApplicable({ modeCandidate, requirementCandidates: reqC, actualCandidates: actC, propertyConfidence: 0.99, extractionWarningsCount: 0 });
+    check('必須修正1: 上記の組み合わせはauto_applicable:falseになる(capability_domainを示す実仕様が必要)',
+      evalResult.applicable === false);
+  }
+
+  // ── v2.10: 外部レビュー必須修正2の回帰テスト ──
+  // 「B側(実仕様側)の点である」ことだけでは、その点が達成値なのか設定値・公称値・試験条件・
+  // 参考値なのかを識別できない。以下4例は、いずれもachieved_pointが自動適用されないことを
+  // 確認する(achieved_pointが最上位候補から外れる、またはunknownとの差が閾値未満になる)。
+  {
+    const disambiguousCases = ['設定温度25 ℃', '試験温度25 ℃', '公称電圧220 V', '参考値58 dB(A)'];
+    for (const t of disambiguousCases) {
+      const r = extractQuantities(t)[0];
+      const c = generateIntervalSemanticsCandidates(r, { side: 'B', nearbyText: t });
+      check(`必須修正2: 「${t}」はachieved_pointが自動適用されない(unknownが最上位、またはachieved_pointとの差が閾値未満)`,
+        c[0].value === 'unknown' || marginOf(c) < AUTO_APPLICABLE_THRESHOLDS.margin);
+    }
+  }
 
   assertions.forEach(a => console.log((a.pass ? '[OK] ' : '[FAIL] ') + a.name));
   const failCount = assertions.filter(a => !a.pass).length;
