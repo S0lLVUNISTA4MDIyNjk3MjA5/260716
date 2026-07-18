@@ -149,7 +149,7 @@ v2.5は両側区間を無条件で「対応可能領域」（`actual ⊇ require
 
 この結果、外部レビューが指摘した「`interval_semantics`は将来の改善ではなく、工程5を安全に動かすための必須入力である」という結論が、本プロトタイプの実データでも裏付けられた形になる。
 
-**付記（v2.7）**：`comparisonMode`実装自体にも、無限境界（下限・上限なし）の包含判定が逆という不具合が別途指摘され、`quantity_extraction_prototype.js` v2.7で修正された（`quantity_extraction_prototype.md`5.10節、`quantity_extraction_prototype_review.md`0.6節参照）。本プロトタイプが使う温度・冷房能力等の比較はいずれも有限境界のため、この修正による本プロトタイプの出力・アサーションへの影響はない（10件中10件成功のまま）。
+**付記（v2.7〜v2.8）**：`comparisonMode`実装自体にも、無限境界（下限・上限なし）の包含判定が逆という不具合（v2.7で修正）、および`actual`が真の点でも`comparisonMode`の指定が無視されるという不具合（v2.8で修正）が別途指摘・修正された（`quantity_extraction_prototype.md`5.10〜5.11節、`quantity_extraction_prototype_review.md`0.6〜0.7節参照）。この時点で比較エンジン（`coverageGap()`）側の基盤は一旦完成と評価された。本プロトタイプが使う温度・冷房能力等の比較はいずれも有限境界で、かつmode明示は使っていないため、これらの修正による本プロトタイプの出力・アサーションへの影響はない（10件中10件成功のまま）。
 
 ## 6. 完了条件チェック
 

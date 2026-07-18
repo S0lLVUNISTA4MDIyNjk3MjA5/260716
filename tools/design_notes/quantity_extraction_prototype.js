@@ -1,4 +1,4 @@
-// 工程4a（数量抽出）たたき台プロトタイプ v2.7
+// 工程4a（数量抽出）たたき台プロトタイプ v2.8
 // tools/design_notes/quantity_extraction_prototype_review.md の必須修正6項目
 // （符号付き数値／区間統合／境界包含区分／原文保持／暫定判定明示／条件誤伝播防止）
 // および、そのレビュー過程で追加発見した2件（±公差、桁区切りカンマ）を反映。
@@ -31,6 +31,14 @@
 //       両側区間を区別する必要がなくなったため、comparisonMode指定時は実仕様が片側区間でも
 //       比較できるよう統合した（modeが指定されない場合は従来どおり比較不能を返す）。
 //       詳細はquantity_extraction_prototype_review.md 0.6節を参照。
+// v2.8: 外部レビューにより、actualが真の点であってもcomparisonModeが明示されればそれを
+//       尊重すべきという指摘を受け修正。v2.7までは、actualが点であればcomparisonModeの指定を
+//       無視して常にpoint_in_regionへ入っていたため、明示的にactual_covers_requirement等を
+//       渡してもAPI利用者の意図どおりに動かなかった（例: 要求0~50℃×実仕様25℃は、25℃を
+//       「達成値」と見るか「対応可能領域」と見るかで結果が逆転するはずが、常に前者として
+//       扱われていた）。mode未指定かつ点の場合は従来どおりpoint_in_regionを既定動作として
+//       維持しつつ、mode明示時はそれに従うよう修正した。詳細はquantity_extraction_prototype_review.md
+//       0.7節を参照。
 // 依存ライブラリなし。 `node quantity_extraction_prototype.js` で単体実行できる。
 
 const UNIT_DEFS = [
@@ -374,6 +382,27 @@ function coversUpper(outer, inner) {
   return outer.upper.inclusive || !inner.upper.inclusive;
 }
 
+// 達成値(v)が要求(rq)の許容範囲内にあるかを判定する(point_in_regionモードの実体)。
+function pointInRegionResult(rq, v, extractionWarnings) {
+  const lowerCovered = !rq.lower || v > rq.lower.value || (v === rq.lower.value && rq.lower.inclusive);
+  const upperCovered = !rq.upper || v < rq.upper.value || (v === rq.upper.value && rq.upper.inclusive);
+  const boundaryMismatch = {
+    lower: !!(rq.lower && v === rq.lower.value && !rq.lower.inclusive),
+    upper: !!(rq.upper && v === rq.upper.value && !rq.upper.inclusive),
+  };
+  return {
+    comparable: true,
+    provisional: true, // 意味対応付け(工程3)による同一設計特性・同一条件の確認を経ていない暫定結果
+    comparison_mode: 'point_in_region',
+    assumptions: ['同じ設計特性として選択済み', '同じ運転条件', '単位換算不要'],
+    satisfied: lowerCovered && upperCovered,
+    lowGap: rq.lower ? v - rq.lower.value : null,
+    highGap: rq.upper ? rq.upper.value - v : null,
+    boundaryMismatch,
+    extractionWarnings,
+  };
+}
+
 function coverageGap(requirement, actual, options = {}) {
   // v2.6: 抽出時の警告(修飾語の文脈未確定等)を、早期returnも含めた全ての結果へ伝播する。
   // 単位不一致・非interval形式で早期returnする経路では警告収集前に戻っていたため
@@ -399,27 +428,35 @@ function coverageGap(requirement, actual, options = {}) {
     };
   }
 
-  // actualが真の点(達成値)であれば、比較方向は一意に決まる。「達成値が要求の許容範囲内か」
-  // (point_in_region)。これはcomparisonModeの指定を必要としない。
-  if (isGenuinePoint(ac)) {
-    const v = ac.lower.value;
-    const lowerCovered = !rq.lower || v > rq.lower.value || (v === rq.lower.value && rq.lower.inclusive);
-    const upperCovered = !rq.upper || v < rq.upper.value || (v === rq.upper.value && rq.upper.inclusive);
-    const boundaryMismatch = {
-      lower: !!(rq.lower && v === rq.lower.value && !rq.lower.inclusive),
-      upper: !!(rq.upper && v === rq.upper.value && !rq.upper.inclusive),
-    };
-    return {
-      comparable: true,
-      provisional: true, // 意味対応付け(工程3)による同一設計特性・同一条件の確認を経ていない暫定結果
-      comparison_mode: 'point_in_region',
-      assumptions: ['同じ設計特性として選択済み', '同じ運転条件', '単位換算不要'],
-      satisfied: lowerCovered && upperCovered,
-      lowGap: rq.lower ? v - rq.lower.value : null,
-      highGap: rq.upper ? rq.upper.value - v : null,
-      boundaryMismatch,
-      extractionWarnings,
-    };
+  const mode = options.comparisonMode;
+
+  // v2.8: actualが真の点であっても、意味は一意ではない(外部レビュー指摘)。
+  // 「要求0~50℃に対し実仕様25℃」は、25℃が「試験で確認した1点(達成値)」なら要求範囲内の
+  // 点として適合するが、「対応可能な温度が25℃だけ(能力領域)」という意味なら、0~50℃の
+  // 要求範囲を覆っていないため未充足になる――同じ数値でも解釈で結果が逆転する。
+  // v2.7までは、actualが点であればcomparisonModeの指定を無視して常にpoint_in_regionへ
+  // 入っていたため、明示的にactual_covers_requirement等を渡してもAPI利用者の意図どおりに
+  // 動かなかった。v2.8では、modeが明示された場合はそれを優先する。
+  //   - mode未指定 かつ actualが真の点: 暫定的にpoint_in_regionとして扱う(達成値との比較が
+  //     最も典型的なケースであるため。完全な安全策として比較不能にする案もあったが、既存の
+  //     デモ・回帰テストとの互換性を優先し、軽い方の対応を採用した)。
+  //   - mode: 'point_in_region'が明示された場合: actualが真の点であることを要求する
+  //     (点でなければ、このmodeは意味を持たないため比較不能を返す)。
+  //   - mode: 'actual_covers_requirement' / 'requirement_covers_actual'が明示された場合:
+  //     actualが点であっても、その点を退化区間[v,v]とみなし、下記のcoversLower/coversUpperに
+  //     よる一般的な区間包含判定へそのまま合流させる(点は単に幅0の区間である)。
+  if (!mode && isGenuinePoint(ac)) {
+    return pointInRegionResult(rq, ac.lower.value, extractionWarnings);
+  }
+  if (mode === 'point_in_region') {
+    if (!isGenuinePoint(ac)) {
+      return {
+        comparable: false,
+        reason: 'comparisonMode: point_in_regionはactualが真の点の場合のみ有効です',
+        extractionWarnings,
+      };
+    }
+    return pointInRegionResult(rq, ac.lower.value, extractionWarnings);
   }
 
   // v2.7: actualが点でない場合(片側区間・両側区間のいずれも)、その区間が何を意味するかは
@@ -437,7 +474,6 @@ function coverageGap(requirement, actual, options = {}) {
   //     actualが要求範囲全体を覆っていないという理由で誤って未充足と判定していた。
   // どちらの意味かは工程3(意味対応付け)が候補として持つべき情報であり、工程4a単体では
   // 判定できない。comparisonModeが明示されない限り、自動で方向を決めず比較不能を返す。
-  const mode = options.comparisonMode;
   if (mode !== 'actual_covers_requirement' && mode !== 'requirement_covers_actual') {
     return {
       comparable: false,
@@ -755,6 +791,31 @@ if (require.main === module) {
     const g4 = coverageGap(req4, act4, { comparisonMode: 'requirement_covers_actual' });
     check('無限境界: 要求(-∞,60]は実仕様(-∞,58]をrequirement_covers_actualで充足と判定する',
       g4.satisfied === true);
+  }
+  {
+    // v2.8: 外部レビュー指摘の回帰テスト。actualが真の点でも、comparisonModeが明示された場合は
+    // それを優先する(v2.7まではmode指定を無視して常にpoint_in_regionへ入っていた)。
+    // 「要求0~50℃×実仕様25℃」は、25℃を「試験で確認した1点」と見るか「対応可能領域が
+    // 25℃だけ」と見るかで結果が逆転する典型例。
+    const req = extractQuantities('温度は0 ℃から50 ℃まで対応すること')[0]; // [0, 50]
+    const act = extractQuantities('使用温度は25 ℃')[0]; // 点25
+
+    const gPoint = coverageGap(req, act, { comparisonMode: 'point_in_region' });
+    check('点+mode明示: point_in_regionを明示すれば25℃は0~50℃の範囲内で充足する',
+      gPoint.satisfied === true && gPoint.comparison_mode === 'point_in_region');
+
+    const gActualCovers = coverageGap(req, act, { comparisonMode: 'actual_covers_requirement' });
+    check('点+mode明示: actual_covers_requirementを明示すれば、点25℃は0~50℃全体を覆えず未充足になる',
+      gActualCovers.satisfied === false && gActualCovers.comparison_mode === 'actual_covers_requirement');
+
+    const gReqCovers = coverageGap(req, act, { comparisonMode: 'requirement_covers_actual' });
+    check('点+mode明示: requirement_covers_actualを明示すれば、点25℃は0~50℃に収まるため充足する',
+      gReqCovers.satisfied === true && gReqCovers.comparison_mode === 'requirement_covers_actual');
+
+    check('点+mode明示: comparison_modeが指定したmodeと一致する(黙ってpoint_in_regionへ落ちない)',
+      gPoint.comparison_mode === 'point_in_region' &&
+      gActualCovers.comparison_mode === 'actual_covers_requirement' &&
+      gReqCovers.comparison_mode === 'requirement_covers_actual');
   }
 
   assertions.forEach(a => console.log((a.pass ? '[OK] ' : '[FAIL] ') + a.name));

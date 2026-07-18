@@ -189,7 +189,23 @@ function coversLower(outer, inner) {
 
 **レビューからの軽微な改善提案（未対応・将来課題）**：`lowGap`/`highGap`は`comparisonMode`によって正負の意味（不足量か余裕量か）が変わるため、将来的には`boundaryDelta`＋`deltaInterpretation`のような、モードに依存しない表現へ変更することが望ましいという指摘を受けた。レビュー自身も「今回の修正を止める問題ではない」としており、本ラウンドでは対応せず、次の検討候補として残す（`quantity_extraction_prototype.md`7章参照）。
 
-> **注記:** 以下の1〜5章は初回レビュー時点の指摘内容を保存した履歴である。現在の対応状況は0〜0.6節および6章を参照する。
+## 0.7 レビュアーコメント：点でもcomparisonModeが必要という指摘（v2.8、2026-07-18）
+
+v2.7（無限境界の包含判定修正、片側・両側区間のコード統合）は承認されたが、「v2.6の安全策が完成」とする前にもう1点、重要な指摘を受けた。指摘は着手前に実際のコードで再現を確認した（推測で対応せず、レビューの主張を裏取りした上で着手）。**指摘は実際に再現した。**
+
+**指摘の要旨**：`actual`が真の点であっても、意味は一意ではない。要求「使用温度0〜50℃」に対し実仕様「使用温度25℃」の場合、25℃が「試験で確認した1点（達成値）」なら要求範囲内の点として適合するが、「対応可能な温度が25℃だけ（能力領域）」という意味なら、0〜50℃の要求範囲を覆っていないため未充足になる。同じ数値でも解釈で結果が逆転する。しかしv2.7までは、`actual`が点であれば`comparisonMode`の指定を無視して常に`point_in_region`へ入っていたため、`coverageGap(requirement, actual, { comparisonMode: 'actual_covers_requirement' })`のように明示的に渡しても無視され、`comparison_mode`が`point_in_region`のまま`satisfied:true`を返すことを確認した。これはAPI利用者にとって予想外の挙動である。
+
+**採用した対応**：レビュー提案の3モード設計をそのまま採用した。
+
+- `comparisonMode`が明示された場合：`actual`が点か区間かにかかわらず、指定されたモードで比較する。`point_in_region`が明示された場合は`actual`が真の点であることを要求し（点でなければ`comparable:false`）、`actual_covers_requirement`/`requirement_covers_actual`が明示された場合は、点を退化区間`[v,v]`とみなし、v2.7で修正済みの`coversLower`/`coversUpper`による一般的な区間包含判定へそのまま合流させる。
+- `comparisonMode`が未指定かつ`actual`が真の点：暫定的に`point_in_region`として扱う（既存デモ・回帰テストとの互換性を優先し、レビューが提示した2案「暫定的にpoint_in_region」「完全な安全策なら比較不能」のうち軽い方を採用した）。
+- `comparisonMode`が未指定かつ`actual`が非点区間：従来どおり比較不能（v2.5〜v2.7から変更なし）。
+
+レビューが提示した4件のテストケース（要求`[0,50]`×点`25`、mode=`point_in_region`→充足／mode=`actual_covers_requirement`→未充足／mode=`requirement_covers_actual`→充足／`comparison_mode`が指定値と一致することの確認）を、すべて実際に`coverageGap()`を実行して期待どおりの結果になることを確認したうえで、既存45件に追加し、**合計49件の自動アサーションが全件成功**することを確認した（v2.8、`quantity_extraction_prototype.js`）。`semantic_mapping_prototype.js`側はこの修正の影響を受けず、10件中10件成功のまま（本プロトタイプは`point_in_region`をmode未指定のまま使う既存の呼び出し方のみで、mode明示の新しい分岐は使用していないため）。
+
+**レビューの結論**：区間の形（片側・両側・点）だけでは意味を決められないという原則は、点にも当てはまる。次の`interval_semantics`候補生成では、少なくとも`achieved_point`/`capability_domain`/`acceptable_region`/`outcome_range`/`guaranteed_minimum`/`guaranteed_maximum`を扱う必要があり、その候補から`comparisonMode`を選択する設計へ進むのが妥当と評価された。「点に対する明示モードの尊重」を修正した本ラウンドをもって、比較エンジン側（`coverageGap()`）の基盤は一旦固定してよいとの判断を受けた。
+
+> **注記:** 以下の1〜5章は初回レビュー時点の指摘内容を保存した履歴である。現在の対応状況は0〜0.7節および6章を参照する。
 
 ## 1. 総合評価
 
