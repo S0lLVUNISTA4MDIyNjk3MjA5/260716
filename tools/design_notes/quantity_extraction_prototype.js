@@ -1,9 +1,11 @@
-// 工程4a（数量抽出）たたき台プロトタイプ v2.2
+// 工程4a（数量抽出）たたき台プロトタイプ v2.3
 // tools/design_notes/quantity_extraction_prototype_review.md の必須修正6項目
 // （符号付き数値／区間統合／境界包含区分／原文保持／暫定判定明示／条件誤伝播防止）
 // および、そのレビュー過程で追加発見した2件（±公差、桁区切りカンマ）を反映。
 // v2.1: 境界包含を考慮した被覆判定と、約・最大・最小等の修飾語保持を追加。
 // v2.2: 最大・最小由来の隣接する片側境界も1件の区間へ統合。
+// v2.3: 文分割が小数点を文区切りと誤認識し数値が破損する不具合を修正
+//       （工程3プロトタイプでの実データ検証中に発見。例: 「12.5 kW」が「5 kW」になっていた）。
 // 依存ライブラリなし。 `node quantity_extraction_prototype.js` で単体実行できる。
 
 const UNIT_DEFS = [
@@ -46,9 +48,12 @@ const NUM = '(-?\\d{1,3}(?:,\\d{3})*(?:\\.\\d+)?|-?\\d+(?:\\.\\d+)?)';
 function splitSentences(text) {
   // 句点等の直後で分割し、各文の絶対オフセットを保持する。
   // 条件節の付与(後述)をこの文単位に限定することで、文をまたいだ誤伝播を防ぐ（レビュー2.6への対応）。
+  // v2.3: ASCIIピリオド"."は、数字に挟まれている場合(小数点)は文区切りとみなさない。
+  // 修正前は「周囲温度50 °Cで12.5 kW」の小数点を文区切りと誤認識し、
+  // 「12.5 kW」が「5 kW」に破損する不具合があった(工程3プロトタイプの実データ検証で発見)。
   const parts = [];
   let start = 0;
-  const re = /[。.!?！？]/g;
+  const re = /(?<!\d)\.(?!\d)|[。!?！？]/g;
   let m;
   while ((m = re.exec(text))) {
     parts.push({ text: text.slice(start, m.index + 1), offset: start });
@@ -442,6 +447,16 @@ if (require.main === module) {
     const r = extractQuantities('50±2℃')[0];
     check('公差表記: 50±2℃が[48,52]の区間になる',
       r?.quantity.lower.value === 48 && r?.quantity.upper.value === 52);
+  }
+  {
+    // v2.3: 小数点が文区切りと誤認識され数値が破損する不具合の回帰テスト
+    // （工程3プロトタイプでの実データ検証で発見。"周囲温度50 °Cで12.5 kW"の".5"以降が
+    //   独立した「新しい文」として扱われ、"12.5 kW"が"5 kW"に破損していた）
+    const r = extractQuantities('周囲温度50 °Cで12.5 kW').find(q => q.unit.canonical === 'kW');
+    check('小数点の文区切り誤認識防止: 12.5 kWが破損せず抽出される',
+      r?.source_text === '12.5 kW' && r?.quantity.lower.value === 12.5);
+    check('小数点の文区切り誤認識防止: 条件(50°C)も正しく紐づく',
+      r?.condition_candidates?.[0]?.quantity.lower.value === 50);
   }
   check('スラッシュ: selection_semanticsがunknown',
     extractQuantities('50/60 Hz')[0]?.quantity.selection_semantics === 'unknown');
