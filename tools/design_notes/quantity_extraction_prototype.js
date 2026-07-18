@@ -1,4 +1,4 @@
-// 工程4a（数量抽出）たたき台プロトタイプ v2.4
+// 工程4a（数量抽出）たたき台プロトタイプ v2.5
 // tools/design_notes/quantity_extraction_prototype_review.md の必須修正6項目
 // （符号付き数値／区間統合／境界包含区分／原文保持／暫定判定明示／条件誤伝播防止）
 // および、そのレビュー過程で追加発見した2件（±公差、桁区切りカンマ）を反映。
@@ -9,6 +9,12 @@
 // v2.4: coverageGap()の比較方向を、実仕様が「点」か「範囲」かで切り替えるよう修正
 //       （片側閾値要求(Xkg以上等) vs 単一の達成値を常に誤判定していた不具合。詳細は
 //        semantic_mapping_prototype.md参照）。
+// v2.5: 外部レビューにより、v2.4の「actualが点か範囲か」だけでは比較方向を一意に決定できない
+//       ケース（実仕様側も片側区間＝保証下限/保証上限の場合）が指摘され、安全策として片側区間は
+//       自動判定せず比較不能を返すよう修正。あわせて、空区間([50,50)等)を点と誤認する不具合、
+//       抽出時の警告を比較結果へ伝播していなかった不具合も修正。恒久対応（工程3による
+//       interval_semantics候補生成）は今後の検討課題。詳細はquantity_extraction_prototype_review.md
+//       0.4節を参照。
 // 依存ライブラリなし。 `node quantity_extraction_prototype.js` で単体実行できる。
 
 const UNIT_DEFS = [
@@ -313,6 +319,22 @@ function extractQuantities(text) {
 }
 
 // ── 工程5デモ: 区間の被覆判定(レビュー2.5: 暫定判定であることを明示する) ──
+// 区間が空集合(矛盾)かどうかを判定する。下限>上限、または下限===上限で
+// 両端のいずれかが非包含(exclusive)の場合は、値を1つも含まない空集合になる。
+// (レビュー指摘: 50℃以上50℃未満([50,50))を値だけ見て「点50℃」と誤認する不具合)
+function isEmptyInterval(q) {
+  if (!q.lower || !q.upper) return false;
+  if (q.lower.value > q.upper.value) return true;
+  if (q.lower.value === q.upper.value) return !(q.lower.inclusive && q.upper.inclusive);
+  return false;
+}
+
+// 真の点(単一の達成値)かどうかを判定する。空集合を誤って点扱いしないよう、
+// 値の一致に加えて両端が包含(inclusive)であることも要求する。
+function isGenuinePoint(q) {
+  return !!(q.lower && q.upper && q.lower.value === q.upper.value && q.lower.inclusive && q.upper.inclusive);
+}
+
 function coverageGap(requirement, actual) {
   if (requirement.unit.canonical !== actual.unit.canonical) {
     return { comparable: false, reason: '単位不一致' };
@@ -321,57 +343,92 @@ function coverageGap(requirement, actual) {
   if (rq.kind !== 'interval' || ac.kind !== 'interval') {
     return { comparable: false, reason: '区間形式でない値は本デモでは比較しない' };
   }
-  // v2.4: 比較方向を、実仕様(actual)が「点」か「範囲」かで切り替える。要求(requirement)側の
-  // 形(範囲/閾値/厳密一致)を推定する必要はなく、実仕様側の形は既存データから確実に判定できる。
-  //   - 実仕様が範囲(lower≠upper): 「実仕様が要求範囲を覆っているか」(actual ⊇ requirement)。
-  //     温度のような、対応可能な範囲そのものを比較する要求に対応する。
-  //   - 実仕様が点(lower===upper): 「達成値が要求の許容範囲に収まっているか」(requirement ⊇ {actual})。
-  //     「Xkg以上」のような片側閾値要求 vs 単一の達成値の比較に対応する(冷房能力・電圧・騒音等)。
-  //     旧実装はこの区別がなく、常にactual ⊇ requirement方向で判定していたため、
-  //     「12kW以上」の要求に対し999kWという十分すぎる実仕様値を「未充足」と誤判定していた
-  //     (工程3プロトタイプでの実データ検証で発見。詳細はsemantic_mapping_prototype.md参照)。
-  const actualIsPoint = !!(ac.lower && ac.upper && ac.lower.value === ac.upper.value);
-  const comparisonMode = actualIsPoint ? 'point_in_region' : 'range_covers_range';
 
-  let lowerCovered, upperCovered, boundaryMismatch;
-  if (actualIsPoint) {
+  // v2.5: 抽出時の警告(修飾語の文脈未確定等)を比較結果へ伝播する。
+  // 「抽出結果に要確認事項なし」を無条件に仮定していたv2.4までの不具合への対応。
+  const extractionWarnings = [
+    ...(requirement.extraction?.warnings || []).map(w => ({ side: 'requirement', warning: w })),
+    ...(actual.extraction?.warnings || []).map(w => ({ side: 'actual', warning: w })),
+  ];
+
+  if (isEmptyInterval(rq) || isEmptyInterval(ac)) {
+    return {
+      comparable: false,
+      reason: '区間が空集合(矛盾する境界)の可能性があります。境界包含区分を確認してください',
+      extractionWarnings,
+    };
+  }
+
+  // v2.5: 比較方向の決定を、actual(実仕様)側の構造だけから機械的に判定できる範囲に限定する。
+  //   - actualが真の点(達成値): 「達成値が要求の許容範囲内か」(point_in_region)。
+  //   - actualが両側区間(lower・upperの両方を持つ): 「実仕様の範囲が要求範囲を覆っているか」
+  //     (range_covers_range)。requirement側が実質1点(例:220V)であっても、通常の範囲比較として
+  //     正しく動く(実仕様の範囲が要求の値を含むかどうかの判定になる)。
+  //   - actualが片側区間(lower・upperの片方のみ): 「保証下限(Xkg以上)」「保証上限(Xkg以下)」の
+  //     どちらを意味するかを、実仕様の構造だけからは一意に決定できない。v2.4は片側区間も
+  //     「範囲」とみなしrange_covers_range方向で判定していたため、要求60dB以下×実仕様最大58dB、
+  //     要求12kW以上×実仕様最小15kWのような、明らかに充足しているはずの組み合わせを誤って
+  //     未充足と判定していた(レビューで指摘・実データで再現確認)。恒久対応は、工程3が区間の
+  //     意味候補(interval_semantics: 対応可能領域/達成値/保証下限/保証上限/変動範囲)を生成し、
+  //     比較モードを明示的に選ぶ設計を予定している。それまでの安全策として、片側区間は
+  //     自動で比較方向を決めず比較不能を返す(詳細はquantity_extraction_prototype.md参照)。
+  if (isGenuinePoint(ac)) {
     const v = ac.lower.value;
-    lowerCovered = !rq.lower || v > rq.lower.value || (v === rq.lower.value && rq.lower.inclusive);
-    upperCovered = !rq.upper || v < rq.upper.value || (v === rq.upper.value && rq.upper.inclusive);
-    boundaryMismatch = {
+    const lowerCovered = !rq.lower || v > rq.lower.value || (v === rq.lower.value && rq.lower.inclusive);
+    const upperCovered = !rq.upper || v < rq.upper.value || (v === rq.upper.value && rq.upper.inclusive);
+    const boundaryMismatch = {
       lower: !!(rq.lower && v === rq.lower.value && !rq.lower.inclusive),
       upper: !!(rq.upper && v === rq.upper.value && !rq.upper.inclusive),
     };
-  } else {
-    lowerCovered = (() => {
+    return {
+      comparable: true,
+      provisional: true, // 意味対応付け(工程3)による同一設計特性・同一条件の確認を経ていない暫定結果
+      comparison_mode: 'point_in_region',
+      assumptions: ['同じ設計特性として選択済み', '同じ運転条件', '単位換算不要'],
+      satisfied: lowerCovered && upperCovered,
+      lowGap: rq.lower ? v - rq.lower.value : null,
+      highGap: rq.upper ? rq.upper.value - v : null,
+      boundaryMismatch,
+      extractionWarnings,
+    };
+  }
+
+  if (ac.lower && ac.upper) {
+    const lowerCovered = (() => {
       if (!rq.lower) return true;            // 要求に下限がなければ、下限側の制約は無い(常に被覆)
       if (!ac.lower) return true;            // 実仕様が-∞までなら要求下限を被覆
       if (ac.lower.value < rq.lower.value) return true;
       if (ac.lower.value > rq.lower.value) return false;
       return ac.lower.inclusive || !rq.lower.inclusive;
     })();
-    upperCovered = (() => {
+    const upperCovered = (() => {
       if (!rq.upper) return true;            // 要求に上限がなければ、上限側の制約は無い(常に被覆)
       if (!ac.upper) return true;            // 実仕様が+∞までなら要求上限を被覆
       if (ac.upper.value > rq.upper.value) return true;
       if (ac.upper.value < rq.upper.value) return false;
       return ac.upper.inclusive || !rq.upper.inclusive;
     })();
-    boundaryMismatch = {
+    const boundaryMismatch = {
       lower: !!(rq.lower && ac.lower && rq.lower.value === ac.lower.value && rq.lower.inclusive && !ac.lower.inclusive),
       upper: !!(rq.upper && ac.upper && rq.upper.value === ac.upper.value && rq.upper.inclusive && !ac.upper.inclusive),
+    };
+    return {
+      comparable: true,
+      provisional: true,
+      comparison_mode: 'range_covers_range',
+      assumptions: ['同じ設計特性として選択済み', '同じ運転条件', '単位換算不要'],
+      satisfied: lowerCovered && upperCovered,
+      lowGap: (rq.lower && ac.lower) ? ac.lower.value - rq.lower.value : null,
+      highGap: (rq.upper && ac.upper) ? rq.upper.value - ac.upper.value : null,
+      boundaryMismatch,
+      extractionWarnings,
     };
   }
 
   return {
-    comparable: true,
-    provisional: true, // 意味対応付け(工程3)による同一設計特性・同一条件の確認を経ていない暫定結果
-    comparison_mode: comparisonMode,
-    assumptions: ['同じ設計特性として選択済み', '同じ運転条件', '単位換算不要', '抽出結果に要確認事項なし'],
-    satisfied: lowerCovered && upperCovered,
-    lowGap: (rq.lower && ac.lower) ? ac.lower.value - rq.lower.value : null,
-    highGap: (rq.upper && ac.upper) ? rq.upper.value - ac.upper.value : null,
-    boundaryMismatch,
+    comparable: false,
+    reason: '区間の意味が未確定です(実仕様が片側区間のため、能力領域・保証下限・保証上限のいずれを表すか構造だけからは判定できません)',
+    extractionWarnings,
   };
 }
 
@@ -547,6 +604,55 @@ if (require.main === module) {
   {
     const g = coverageGap(reqRange, stdRange);
     check('比較結果: provisional=trueが明示される', g.provisional === true && Array.isArray(g.assumptions));
+  }
+  {
+    // v2.5: レビュー指摘(actualの形だけでは片側の意味を一意に決められない)への対応の回帰テスト。
+    // 「Xkg以上」「X以下」のような要求に対し、実仕様が片側区間(最大/最小由来)の場合、
+    // v2.4は誤ってrange_covers_range方向で比較し「未充足」を返していた。
+    // 恒久対応(工程3のinterval_semantics)が入るまでは、自動で比較方向を決めず比較不能を返す。
+    const reqNoise = extractQuantities('騒音値は60 dB(A)以下とすること')[0];
+    const actNoiseMax = extractQuantities('騒音は最大58 dB(A)')[0];
+    const g1 = coverageGap(reqNoise, actNoiseMax);
+    check('片側区間(安全策): 要求60dB以下×実仕様最大58dB(片側)は自動判定せず比較不能を返す',
+      g1.comparable === false && typeof g1.reason === 'string');
+
+    const reqCooling = extractQuantities('冷房能力12 kW以上を確保すること')[0];
+    const actCoolingMin = extractQuantities('冷房能力は最小15 kW')[0];
+    const g2 = coverageGap(reqCooling, actCoolingMin);
+    check('片側区間(安全策): 要求12kW以上×実仕様最小15kW(片側)は自動判定せず比較不能を返す',
+      g2.comparable === false && typeof g2.reason === 'string');
+  }
+  {
+    // v2.5: 要求が実質1点(220V)でも、実仕様が両側区間なら通常の範囲比較として正しく動くことの確認。
+    const reqVoltage = extractQuantities('定格電圧は220 Vとすること')[0];
+    const actVoltageRange = extractQuantities('電源電圧は200 Vから240 Vまで対応')[0];
+    const g = coverageGap(reqVoltage, actVoltageRange);
+    check('両側区間vs実質1点の要求: 220V要求は200〜240Vの実仕様範囲に含まれるため充足する',
+      g.comparison_mode === 'range_covers_range' && g.satisfied === true);
+  }
+  {
+    // v2.5: 境界包含区分の食い違い(要求は50を含む閉区間、実仕様は50を含まない半開区間)の確認。
+    const reqClosed = extractQuantities('温度は0 ℃から50 ℃まで対応すること')[0];
+    const actHalfOpen = extractQuantities('温度は0 ℃以上50 ℃未満で使用可能')[0];
+    const g = coverageGap(reqClosed, actHalfOpen);
+    check('境界包含区分: 要求[0,50](閉)×実仕様[0,50)(半開)は上限側で未充足になる',
+      g.satisfied === false && g.boundaryMismatch.upper === true);
+  }
+  {
+    // v2.5: 空区間([50,50)、50以上50未満)を「点50」と誤認しないことの回帰テスト。
+    const reqRange2 = extractQuantities('温度は40 ℃以上60 ℃以下とすること')[0];
+    const actEmpty = extractQuantities('温度は50 ℃以上50 ℃未満で使用可能')[0];
+    const g = coverageGap(reqRange2, actEmpty);
+    check('空区間: 50℃以上50℃未満([50,50))は点として扱われず比較不能を返す',
+      g.comparable === false);
+  }
+  {
+    // v2.5: 抽出時の警告(公差表記など)が比較結果へ伝播することの確認。
+    const reqVoltageRange = extractQuantities('電源電圧は200 Vから240 Vまで対応すること')[0];
+    const actTolerance = extractQuantities('電源電圧は220±10 Vとする')[0];
+    const g = coverageGap(reqVoltageRange, actTolerance);
+    check('警告伝播: 公差表記由来の警告がextractionWarningsへ伝播する',
+      g.comparable === true && g.extractionWarnings.some(w => w.side === 'actual' && w.warning.includes('公差表記')));
   }
 
   assertions.forEach(a => console.log((a.pass ? '[OK] ' : '[FAIL] ') + a.name));
