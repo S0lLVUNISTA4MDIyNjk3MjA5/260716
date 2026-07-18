@@ -1,165 +1,408 @@
-// たたき台プロトタイプ: 工程4a（単一記録内での数量抽出）
-// 依存ライブラリなし。単位カテゴリ・比較演算子・範囲表現の辞書ベース抽出。
+// 工程4a（数量抽出）たたき台プロトタイプ v2
+// tools/design_notes/quantity_extraction_prototype_review.md の必須修正6項目
+// （符号付き数値／区間統合／境界包含区分／原文保持／暫定判定明示／条件誤伝播防止）
+// および、そのレビュー過程で追加発見した2件（±公差、桁区切りカンマ）を反映。
+// 依存ライブラリなし。 `node quantity_extraction_prototype.js` で単体実行できる。
 
-const UNIT_TABLE = [
-  // [正規表現(raw表記), canonical, category]
-  { re: /°C|℃/g, canonical: 'degC', category: 'temperature' },
-  { re: /kW/g, canonical: 'kW', category: 'power' },
-  { re: /\bV\b/g, canonical: 'V', category: 'voltage' },
-  { re: /Hz/g, canonical: 'Hz', category: 'frequency' },
-  { re: /dB\(A\)/g, canonical: 'dB(A)', category: 'sound_pressure_level' },
-  { re: /mm/g, canonical: 'mm', category: 'length' },
+const UNIT_DEFS = [
+  { source: '°C', canonical: 'degC', dimension: 'temperature' },
+  { source: '℃', canonical: 'degC', dimension: 'temperature' },
+  { source: 'kW', canonical: 'kW', dimension: 'power' },
+  { source: 'V', canonical: 'V', dimension: 'voltage' },
+  { source: 'Hz', canonical: 'Hz', dimension: 'frequency' },
+  { source: 'dB(A)', canonical: 'dB(A)', dimension: 'sound_pressure_level' },
+  { source: 'mm', canonical: 'mm', dimension: 'length' },
 ];
-
-// 全角数字→半角、範囲記号の正規化
-function normalizeDigits(s) {
-  return s.replace(/[０-９．]/g, ch => '0123456789.'['０１２３４５６７８９．'.indexOf(ch)])
-           .replace(/[～〜]/g, '~');
-}
-
-// 数値+単位の1トークンを拾う正規表現（例: "50 °C", "12 kW", "220 V", "60 dB(A)"）
-const NUM_UNIT = /(\d+(?:\.\d+)?)\s*(°C|℃|kW|V|Hz|dB\(A\)|mm)/g;
+const UNIT_ALT = '°C|℃|kW|V|Hz|dB\\(A\\)|mm';
 
 function unitInfo(raw) {
-  for (const u of UNIT_TABLE) {
-    u.re.lastIndex = 0;
-    if (u.re.test(raw)) return { raw, canonical: u.canonical, category: u.category };
-  }
-  return { raw, canonical: raw, category: 'unknown' };
+  const def = UNIT_DEFS.find(u => u.source === raw);
+  return def ? { source: raw, canonical: def.canonical, dimension: def.dimension }
+             : { source: raw, canonical: raw, dimension: 'unknown' };
 }
 
-function extractQuantities(text) {
-  const norm = normalizeDigits(text);
-  const results = [];
-  const consumed = new Set();
+// 文脈トークン(周辺語)。将来はドメイン別に拡張する前提の暫定リスト。
+const CONTEXT_TOKENS = ['三相', '単相', 'AC', 'DC', '交流', '直流', '定格'];
 
-  // 1. 範囲表現: "X~Y unit" または "X unit~Y unit"（単位が片側/両側どちらの表記も許容。例: "0 °C～40 °C"）
-  const rangeRe = /(\d+(?:\.\d+)?)\s*(°C|℃|kW|V|Hz|dB\(A\)|mm)?\s*~\s*(\d+(?:\.\d+)?)\s*(°C|℃|kW|V|Hz|dB\(A\)|mm)/g;
+// 全角→半角の1:1文字置換のみ行う(文字数・位置を変えない)。
+// これにより、抽出したspanをそのまま元のtextへ適用してsource_textを取り出せる
+// （正規化前の原文と、正規化後の文字列を両方保持できる＝レビュー2.4への対応）。
+function normalizeText1to1(text) {
+  return text
+    .replace(/[０-９．]/g, ch => '0123456789.'['０１２３４５６７８９．'.indexOf(ch)])
+    .replace(/[－−]/g, '-')
+    .replace(/[～〜]/g, '~');
+}
+
+function parseNumber(numStr) {
+  return Number(numStr.replace(/,/g, ''));
+}
+
+// 符号・桁区切りカンマ・小数に対応した数値トークン（レビュー2.1、および追加発見のカンマ区切りバグへの対応）
+const NUM = '(-?\\d{1,3}(?:,\\d{3})*(?:\\.\\d+)?|-?\\d+(?:\\.\\d+)?)';
+
+function splitSentences(text) {
+  // 句点等の直後で分割し、各文の絶対オフセットを保持する。
+  // 条件節の付与(後述)をこの文単位に限定することで、文をまたいだ誤伝播を防ぐ（レビュー2.6への対応）。
+  const parts = [];
+  let start = 0;
+  const re = /[。.!?！？]/g;
   let m;
-  while ((m = rangeRe.exec(norm))) {
-    const unitToken = m[4]; // 後半の単位を正とする。前半に単位がある場合は一致確認のみ(食い違いは要検証フラグ)
-    const mismatched = m[2] && unitInfo(m[2]).canonical !== unitInfo(unitToken).canonical;
-    results.push({
-      raw_text: m[0],
-      value: { kind: 'range', min: Number(m[1]), max: Number(m[3]) },
-      unit: unitInfo(unitToken),
-      operator: 'range',
-      span: [m.index, m.index + m[0].length],
-      ...(mismatched ? { needs_review: '範囲前後で単位表記が食い違う' } : {}),
-    });
-    for (let i = m.index; i < m.index + m[0].length; i++) consumed.add(i);
+  while ((m = re.exec(text))) {
+    parts.push({ text: text.slice(start, m.index + 1), offset: start });
+    start = m.index + 1;
+  }
+  if (start < text.length) parts.push({ text: text.slice(start), offset: start });
+  return parts;
+}
+
+function contextTokensBefore(sentenceNorm, localIndex) {
+  const windowStart = Math.max(0, localIndex - 12);
+  const before = sentenceNorm.slice(windowStart, localIndex);
+  return CONTEXT_TOKENS.filter(tok => before.includes(tok));
+}
+
+function boundFromOperatorWord(word) {
+  // "以上"/"以下"等の直後語から、単一制約(lower-only or upper-only)を作る
+  if (word === '以上') return { side: 'lower', inclusive: true };
+  if (word === '以下') return { side: 'upper', inclusive: true };
+  if (word === '未満') return { side: 'upper', inclusive: false };
+  if (word === '超える' || word === '超え') return { side: 'lower', inclusive: false };
+  return null;
+}
+
+function makeIntervalExact(value) {
+  return { kind: 'interval', lower: { value, inclusive: true }, upper: { value, inclusive: true } };
+}
+
+function extractFromSentence(sentenceText, sentenceOffset, fullOriginal) {
+  const norm = normalizeText1to1(sentenceText);
+  const raws = []; // 中間表現: {startLocal, endLocal, quantity, unit, warnings, _boundSide}
+  const consumed = new Array(norm.length).fill(false);
+  const markConsumed = (s, e) => { for (let i = s; i < e; i++) consumed[i] = true; };
+  const isFree = (s, e) => { for (let i = s; i < e; i++) if (consumed[i]) return false; return true; };
+
+  // 1. 範囲: "X~Y unit"（unitはX側にあってもなくてもよい。canonicalで比較。レビュー3.1への対応）
+  {
+    const re = new RegExp(`${NUM}\\s*(${UNIT_ALT})?\\s*~\\s*${NUM}\\s*(${UNIT_ALT})`, 'g');
+    let m;
+    while ((m = re.exec(norm))) {
+      const [full, lo, uLo, hi, uHi] = m;
+      const s = m.index, e = m.index + full.length;
+      if (!isFree(s, e)) continue;
+      const uHiInfo = unitInfo(uHi);
+      const warnings = [];
+      if (uLo && unitInfo(uLo).canonical !== uHiInfo.canonical) warnings.push('範囲前後で単位が食い違う');
+      const loVal = parseNumber(lo), hiVal = parseNumber(hi);
+      const reversed = loVal > hiVal;
+      if (reversed) warnings.push('下限が上限を超えている(逆転範囲)'); // レビュー3.4: 自動修正せず警告のみ
+      raws.push({
+        startLocal: s, endLocal: e,
+        quantity: { kind: 'interval', lower: { value: loVal, inclusive: true }, upper: { value: hiVal, inclusive: true } },
+        unit: uHiInfo, warnings,
+      });
+      markConsumed(s, e);
+    }
   }
 
-  // 1b. "XからYまで unit" 形式（例: "周囲温度0 °Cから50 °Cの環境"）
-  const fromToRe = /(\d+(?:\.\d+)?)\s*(°C|℃|kW|V|Hz|dB\(A\)|mm)\s*から\s*(\d+(?:\.\d+)?)\s*(°C|℃|kW|V|Hz|dB\(A\)|mm)\s*(まで)?/g;
-  while ((m = fromToRe.exec(norm))) {
-    if (m[2] !== m[4]) continue; // 単位が食い違う場合はスキップ(要検証フラグ)
-    const overlapsConsumed = [...Array(m[0].length).keys()].some(i => consumed.has(m.index + i));
-    if (overlapsConsumed) continue;
-    results.push({
-      raw_text: m[0],
-      value: { kind: 'range', min: Number(m[1]), max: Number(m[3]) },
-      unit: unitInfo(m[2]),
-      operator: 'range',
-      span: [m.index, m.index + m[0].length],
-    });
-    for (let i = m.index; i < m.index + m[0].length; i++) consumed.add(i);
+  // 1b. "Xunitから Yunitまで"（両側とも単位あり、canonicalで比較。まで、は任意）
+  {
+    const re = new RegExp(`${NUM}\\s*(${UNIT_ALT})\\s*から\\s*${NUM}\\s*(${UNIT_ALT})\\s*(まで)?`, 'g');
+    let m;
+    while ((m = re.exec(norm))) {
+      const [full, lo, uLo, hi, uHi] = m;
+      const s = m.index, e = m.index + full.length;
+      if (!isFree(s, e)) continue;
+      const uLoInfo = unitInfo(uLo), uHiInfo = unitInfo(uHi);
+      const warnings = [];
+      if (uLoInfo.canonical !== uHiInfo.canonical) warnings.push('範囲前後で単位が食い違う');
+      const loVal = parseNumber(lo), hiVal = parseNumber(hi);
+      if (loVal > hiVal) warnings.push('下限が上限を超えている(逆転範囲)');
+      raws.push({
+        startLocal: s, endLocal: e,
+        quantity: { kind: 'interval', lower: { value: loVal, inclusive: true }, upper: { value: hiVal, inclusive: true } },
+        unit: uHiInfo, warnings,
+      });
+      markConsumed(s, e);
+    }
   }
 
-  // 2. 並列値: "X/Y unit" (例: "50/60 Hz" = どちらか一方、範囲ではない)
-  const altRe = /(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)\s*(°C|℃|kW|V|Hz|dB\(A\)|mm)/g;
-  while ((m = altRe.exec(norm))) {
-    const overlapsConsumed = [...Array(m[0].length).keys()].some(i => consumed.has(m.index + i));
-    if (overlapsConsumed) continue;
-    results.push({
-      raw_text: m[0],
-      value: { kind: 'alternatives', options: [Number(m[1]), Number(m[2])] },
-      unit: unitInfo(m[3]),
-      operator: 'alt',
-      span: [m.index, m.index + m[0].length],
-      note: '範囲ではなく択一(この帳票では両対応の意味)。範囲表現との混同に注意。',
-    });
-    for (let i = m.index; i < m.index + m[0].length; i++) consumed.add(i);
+  // 2. ±公差: "X±Y unit" → 区間[X-Y, X+Y]。レビュー後の追加発見バグ(値の取り違え)への対応。
+  {
+    const re = new RegExp(`${NUM}\\s*±\\s*${NUM}\\s*(${UNIT_ALT})`, 'g');
+    let m;
+    while ((m = re.exec(norm))) {
+      const [full, nominal, tol, u] = m;
+      const s = m.index, e = m.index + full.length;
+      if (!isFree(s, e)) continue;
+      const nomVal = parseNumber(nominal), tolVal = parseNumber(tol);
+      raws.push({
+        startLocal: s, endLocal: e,
+        quantity: { kind: 'interval', lower: { value: nomVal - tolVal, inclusive: true }, upper: { value: nomVal + tolVal, inclusive: true } },
+        unit: unitInfo(u),
+        warnings: [`公差表記(中心値${nomVal}, 公差±${tolVal})から区間を算出`],
+      });
+      markConsumed(s, e);
+    }
   }
 
-  // 3. 単一値 + 比較演算子/条件語 (残りのトークンから抽出)
-  NUM_UNIT.lastIndex = 0;
-  while ((m = NUM_UNIT.exec(norm))) {
-    const overlapsConsumed = [...Array(m[0].length).keys()].some(i => consumed.has(m.index + i));
-    if (overlapsConsumed) continue;
-
-    const after = norm.slice(m.index + m[0].length, m.index + m[0].length + 6);
-    const before = norm.slice(Math.max(0, m.index - 8), m.index);
-    let operator = 'exact';
-    if (/^\s*以上/.test(after)) operator = 'at_least';
-    else if (/^\s*以下/.test(after)) operator = 'at_most';
-    else if (/^\s*未満/.test(after)) operator = 'less_than';
-    else if (/^\s*を?超え/.test(after)) operator = 'more_than';
-    if (/約\s*$/.test(before)) operator += '_approx';
-
-    results.push({
-      raw_text: m[0],
-      value: { kind: 'single', amount: Number(m[1]) },
-      unit: unitInfo(m[2]),
-      operator,
-      span: [m.index, m.index + m[0].length],
-    });
+  // 3. 並列値: "X/Y unit"（意味は未確定のまま保持。レビュー3.2への対応）
+  {
+    const re = new RegExp(`${NUM}\\s*/\\s*${NUM}\\s*(${UNIT_ALT})`, 'g');
+    let m;
+    while ((m = re.exec(norm))) {
+      const [full, a, b, u] = m;
+      const s = m.index, e = m.index + full.length;
+      if (!isFree(s, e)) continue;
+      raws.push({
+        startLocal: s, endLocal: e,
+        quantity: { kind: 'alternatives', options: [parseNumber(a), parseNumber(b)], selection_semantics: 'unknown' },
+        unit: unitInfo(u),
+        warnings: ['スラッシュの意味(択一/両対応/比率等)は文脈判定が必要'],
+      });
+      markConsumed(s, e);
+    }
   }
 
-  // 条件節の付与: 「〜において」「〜で」の前にある温度等の値を、後続の値の condition として紐付ける簡易ルール
-  results.sort((a, b) => a.span[0] - b.span[0]);
-  for (let i = 0; i < results.length; i++) {
-    const q = results[i];
-    const tailAfterQ = norm.slice(q.span[1], q.span[1] + 6);
-    const isConditionMarker = /^\s*(において|で)/.test(tailAfterQ);
-    if (isConditionMarker && i + 1 < results.length) {
-      results[i + 1].condition = { raw_text: q.raw_text, unit: q.unit.canonical, value: q.value };
+  // 4. 単一値 + 比較演算子(以上/以下/未満/超える) + 約
+  {
+    const re = new RegExp(`${NUM}\\s*(${UNIT_ALT})`, 'g');
+    let m;
+    while ((m = re.exec(norm))) {
+      const [full, numStr, u] = m;
+      const s = m.index, e = m.index + full.length;
+      if (!isFree(s, e)) continue;
+      const after = norm.slice(e, e + 6);
+      const before = norm.slice(Math.max(0, s - 4), s);
+      let opWord = null;
+      if (/^\s*以上/.test(after)) opWord = '以上';
+      else if (/^\s*以下/.test(after)) opWord = '以下';
+      else if (/^\s*未満/.test(after)) opWord = '未満';
+      else if (/^\s*を?超え/.test(after)) opWord = '超える';
+      const approx = /約\s*$/.test(before);
+      const value = parseNumber(numStr);
+      const warnings = [];
+      let quantity;
+      const bound = opWord ? boundFromOperatorWord(opWord) : null;
+      if (bound) {
+        // レビュー2.3: 境界の包含/非包含を保持する
+        quantity = bound.side === 'lower'
+          ? { kind: 'interval', lower: { value, inclusive: bound.inclusive }, upper: null }
+          : { kind: 'interval', lower: null, upper: { value, inclusive: bound.inclusive } };
+      } else {
+        quantity = makeIntervalExact(value); // レビュー4章: 単一値も区間モデルへ統一(lower=upper)
+      }
+      if (approx) warnings.push('「約」表記のため、境界値は概数として扱う');
+      raws.push({ startLocal: s, endLocal: e, quantity, unit: unitInfo(u), warnings, _boundSide: bound ? bound.side : null });
+      markConsumed(s, e);
+    }
+  }
+
+  raws.sort((a, b) => a.startLocal - b.startLocal);
+
+  // 5. 片側制約の隣接ペアをひとつの区間へ統合(例: "0℃以上50℃以下" → 2件 → 1件。レビュー2.2への対応)
+  const merged = [];
+  for (let i = 0; i < raws.length; i++) {
+    const cur = raws[i];
+    const next = raws[i + 1];
+    if (
+      cur._boundSide === 'lower' && next && next._boundSide === 'upper' &&
+      cur.unit.canonical === next.unit.canonical &&
+      cur.quantity.lower && next.quantity.upper
+    ) {
+      merged.push({
+        startLocal: cur.startLocal, endLocal: next.endLocal,
+        quantity: { kind: 'interval', lower: cur.quantity.lower, upper: next.quantity.upper },
+        unit: cur.unit,
+        warnings: [...cur.warnings, ...next.warnings],
+      });
+      i++; // next を消費済みにする
+      continue;
+    }
+    merged.push(cur);
+  }
+
+  // 6. 条件節付与(同一文内限定。レビュー2.6への対応)。
+  // 直後に「において」「で」が続く数量を、後続数量の condition_candidates にする(確信度付き、自動確定しない)。
+  for (let i = 0; i < merged.length; i++) {
+    const q = merged[i];
+    const tail = norm.slice(q.endLocal, q.endLocal + 6);
+    const isMarker = /^\s*(において|で)/.test(tail);
+    if (isMarker && merged[i + 1]) {
+      merged[i + 1]._condition = q;
       q._isConditionOnly = true;
     }
   }
 
-  return results.map(({ span, _isConditionOnly, ...rest }) => rest);
+  // 7. 出力形へ整形。source_text/normalized_textは同一spanで元テキストから切り出す(1:1マッピングのため安全)。
+  return merged
+    .filter(q => !q._isConditionOnly)
+    .map(q => {
+      const absStart = sentenceOffset + q.startLocal;
+      const absEnd = sentenceOffset + q.endLocal;
+      const contextTokens = contextTokensBefore(norm, q.startLocal);
+      const warnings = [...q.warnings];
+      const out = {
+        source_text: fullOriginal.slice(absStart, absEnd),
+        normalized_text: norm.slice(q.startLocal, q.endLocal),
+        quantity: q.quantity,
+        unit: q.unit,
+        // property/subject/state は工程3(意味対応付け)が埋める領域であり、本プロトタイプ(工程4a)では確定しない
+        context: { property: null, subject: null, state: null, tokens: contextTokens },
+        extraction: { confidence: warnings.length ? 0.6 : 0.95, warnings },
+      };
+      if (q._condition) {
+        const cAbsStart = sentenceOffset + q._condition.startLocal;
+        const cAbsEnd = sentenceOffset + q._condition.endLocal;
+        out.condition_candidates = [{
+          source_text: fullOriginal.slice(cAbsStart, cAbsEnd),
+          quantity: q._condition.quantity,
+          unit: q._condition.unit,
+          confidence: 0.7,
+        }];
+      }
+      return out;
+    });
 }
 
-const samples = [
-  ['PDF 2.1', '空調ユニットは、周囲温度0 °Cから50 °Cの環境で正常に運転できること。'],
-  ['PDF 2.2', '周囲温度50 °Cにおいて、冷房能力12 kW以上を確保すること。'],
-  ['PDF 2.3', '定格電源は三相AC 220 V、50 Hzとすること。'],
-  ['PDF 2.4', '定格運転時の装置正面1 mにおける騒音値は60 dB(A)以下とすること。'],
-  ['Excel 使用温度範囲/標準', '0 °C～40 °C'],
-  ['Excel 使用温度範囲/検討結果', '0 °C～50 °Cで使用可能'],
-  ['Excel 冷房能力/標準', '周囲温度40 °Cで10 kW'],
-  ['Excel 冷房能力/検討結果', '周囲温度50 °Cで12.5 kW'],
-  ['Excel 電源電圧・周波数/標準', '三相AC 200 V、50/60 Hz'],
-  ['Excel 電源電圧・周波数/検討結果', '三相AC 220 V、50 Hzに対応'],
-  ['Excel 運転騒音/標準', '装置正面1 mで65 dB(A)'],
-  ['Excel 運転騒音/検討結果', '定格運転時、装置正面1 mで58 dB(A)'],
-  ['Excel 保守作業スペース/標準', '前面600 mm'],
-  ['Excel 保守作業スペース/検討結果', '前面600 mmを確保'],
-];
-
-for (const [label, text] of samples) {
-  console.log(`\n=== ${label} ===`);
-  console.log('原文:', text);
-  const qs = extractQuantities(text);
-  console.log(JSON.stringify(qs, null, 2));
+function extractQuantities(text) {
+  const sentences = splitSentences(text);
+  const all = [];
+  for (const sent of sentences) {
+    all.push(...extractFromSentence(sent.text, sent.offset, text));
+  }
+  return all;
 }
 
-// ── 工程5への橋渡し: 抽出した数量同士を比較するデモ(使用温度範囲) ──
-console.log('\n=== 工程5デモ: 使用温度範囲の横断比較 ===');
-function rangeOf(text) { return extractQuantities(text).find(q => q.value.kind === 'range'); }
-const reqRange = rangeOf('空調ユニットは、周囲温度0 °Cから50 °Cの環境で正常に運転できること。');
-const stdRange = rangeOf('0 °C～40 °C');
-const resultRange = rangeOf('0 °C～50 °Cで使用可能');
-
+// ── 工程5デモ: 区間の被覆判定(レビュー2.5: 暫定判定であることを明示する) ──
 function coverageGap(requirement, actual) {
-  if (requirement.unit.canonical !== actual.unit.canonical) return { comparable: false, reason: '単位不一致' };
-  const lowGap = actual.value.min - requirement.value.min; // 正なら要求範囲を覆えていない(下限側)
-  const highGap = requirement.value.max - actual.value.max; // 正なら要求範囲を覆えていない(上限側)
-  const satisfied = lowGap <= 0 && highGap <= 0;
-  return { comparable: true, satisfied, lowGap, highGap };
+  if (requirement.unit.canonical !== actual.unit.canonical) {
+    return { comparable: false, reason: '単位不一致' };
+  }
+  const rq = requirement.quantity, ac = actual.quantity;
+  if (rq.kind !== 'interval' || ac.kind !== 'interval') {
+    return { comparable: false, reason: '区間形式でない値は本デモでは比較しない' };
+  }
+  const lowCovered = (ac.lower ? ac.lower.value : -Infinity) <= (rq.lower ? rq.lower.value : -Infinity);
+  const highCovered = (ac.upper ? ac.upper.value : Infinity) >= (rq.upper ? rq.upper.value : Infinity);
+  return {
+    comparable: true,
+    provisional: true, // 意味対応付け(工程3)による同一設計特性・同一条件の確認を経ていない暫定結果
+    assumptions: ['同じ設計特性として選択済み', '同じ運転条件', '単位換算不要', '抽出結果に要確認事項なし'],
+    satisfied: lowCovered && highCovered,
+    lowGap: (rq.lower ? rq.lower.value : null) - (ac.lower ? ac.lower.value : null),
+    highGap: (rq.upper ? rq.upper.value : null) - (ac.upper ? ac.upper.value : null),
+  };
 }
 
-console.log('PDF要求:', reqRange.value, '/ Excel標準機種:', stdRange.value, '/ Excel検討結果:', resultRange.value);
-console.log('要求 vs 標準機種:', coverageGap(reqRange, stdRange));
-console.log('要求 vs 検討結果:', coverageGap(reqRange, resultRange));
+module.exports = { extractQuantities, coverageGap, unitInfo, normalizeText1to1 };
+
+// ── 単体実行時のデモ・テスト出力 ──
+if (require.main === module) {
+  console.log('########## 1. HVACサンプルでの抽出結果 ##########');
+  const hvacSamples = [
+    ['PDF 2.1', '空調ユニットは、周囲温度0 °Cから50 °Cの環境で正常に運転できること。'],
+    ['PDF 2.2', '周囲温度50 °Cにおいて、冷房能力12 kW以上を確保すること。'],
+    ['PDF 2.3', '定格電源は三相AC 220 V、50 Hzとすること。'],
+    ['PDF 2.4', '定格運転時の装置正面1 mにおける騒音値は60 dB(A)以下とすること。'],
+    ['Excel 使用温度範囲/標準', '0 °C～40 °C'],
+    ['Excel 使用温度範囲/検討結果', '0 °C～50 °Cで使用可能'],
+    ['Excel 冷房能力/標準', '周囲温度40 °Cで10 kW'],
+    ['Excel 冷房能力/検討結果', '周囲温度50 °Cで12.5 kW'],
+    ['Excel 電源電圧・周波数/標準', '三相AC 200 V、50/60 Hz'],
+    ['Excel 電源電圧・周波数/検討結果', '三相AC 220 V、50 Hzに対応'],
+    ['Excel 運転騒音/標準', '装置正面1 mで65 dB(A)'],
+    ['Excel 運転騒音/検討結果', '定格運転時、装置正面1 mで58 dB(A)'],
+    ['Excel 保守作業スペース/標準', '前面600 mm'],
+    ['Excel 保守作業スペース/検討結果', '前面600 mmを確保'],
+  ];
+  for (const [label, text] of hvacSamples) {
+    console.log(`\n--- ${label} ---`);
+    console.log('原文:', text);
+    console.log(JSON.stringify(extractQuantities(text), null, 1));
+  }
+
+  console.log('\n\n########## 2. 工程5デモ: 使用温度範囲の充足判定 ##########');
+  const rangeOf = text => extractQuantities(text).find(q => q.quantity.kind === 'interval');
+  const reqRange = rangeOf('空調ユニットは、周囲温度0 °Cから50 °Cの環境で正常に運転できること。');
+  const stdRange = rangeOf('0 °C～40 °C');
+  const resultRange = rangeOf('0 °C～50 °Cで使用可能');
+  console.log('要求 vs 標準機種:', coverageGap(reqRange, stdRange));
+  console.log('要求 vs 検討結果:', coverageGap(reqRange, resultRange));
+
+  console.log('\n\n########## 3. レビュー提示テストケース(正常系・境界系・失敗系) ##########');
+  const reviewCases = [
+    '-10～50℃', '－10℃以上', '0℃以上50℃以下', '0℃以上50℃未満', '0°Cから50℃', '0℃から50°C',
+    '50±2℃', '約50℃', '最大50℃', '50℃を超える', '50℃以下で運転し、220Vを使用する',
+    '50℃で停止する。電源は220Vとする', 'AC 220V', 'DC 24V', '三相AC 200V', '1 m', '1m',
+    '1,500 mm', '５０℃～６０℃', '50～0℃', '50/60 Hz',
+  ];
+  for (const c of reviewCases) {
+    console.log(`\n--- "${c}" ---`);
+    console.log(JSON.stringify(extractQuantities(c), null, 1));
+  }
+
+  console.log('\n\n########## 4. 完了条件チェック(自動アサーション) ##########');
+  const assertions = [];
+  const check = (name, cond) => assertions.push({ name, pass: !!cond });
+
+  check('符号付き数値: -10~50℃ の下限が-10',
+    extractQuantities('-10～50℃')[0]?.quantity.lower.value === -10);
+  check('全角マイナス: -10℃以上 の下限が-10',
+    extractQuantities('－10℃以上')[0]?.quantity.lower.value === -10);
+  {
+    const rs = extractQuantities('0℃以上50℃以下');
+    check('区間統合: 0℃以上50℃以下 が1件のintervalになる',
+      rs.length === 1 && rs[0].quantity.lower.value === 0 && rs[0].quantity.upper.value === 50);
+  }
+  {
+    const r = extractQuantities('0℃以上50℃未満')[0];
+    check('境界包含: 以上=inclusive true', r.quantity.lower.inclusive === true);
+    check('境界非包含: 未満=inclusive false', r.quantity.upper.inclusive === false);
+  }
+  {
+    const r = extractQuantities('５０℃～６０℃')[0];
+    check('原文保持: source_textは全角のまま', r.source_text === '５０℃～６０℃');
+    check('正規化文字列: normalized_textは半角', r.normalized_text === '50℃~60℃');
+  }
+  {
+    const merged = extractQuantities('0°Cから50℃').find(q => q.quantity.lower && q.quantity.upper);
+    check('単位混在でも範囲として認識される(0°Cから50℃)',
+      !!merged && merged.quantity.lower.value === 0 && merged.quantity.upper.value === 50);
+  }
+  {
+    const v220 = extractQuantities('50℃で停止する。電源は220Vとする').find(q => q.unit.canonical === 'V');
+    check('条件誤伝播防止: 文をまたいだ220Vにconditionが付かない', v220 && !v220.condition_candidates);
+  }
+  {
+    const kw = extractQuantities('周囲温度50 °Cにおいて、冷房能力12 kW以上を確保すること。').find(q => q.unit.canonical === 'kW');
+    check('条件伝播: 同一文内の条件は正しく付く',
+      kw?.condition_candidates?.[0]?.quantity.lower.value === 50);
+  }
+  check('逆転範囲: warningsに逆転の指摘がある',
+    extractQuantities('50～0℃')[0]?.extraction.warnings.some(w => w.includes('逆転')));
+  {
+    const r = extractQuantities('三相AC 200V')[0];
+    check('周辺語保持: 三相・ACがcontext.tokensに入る',
+      r.context.tokens.includes('三相') && r.context.tokens.includes('AC'));
+  }
+  check('過検出防止: "1 m"を抽出しない(既知の保留事項)', extractQuantities('1 m').length === 0);
+  check('過検出防止: "1m"を抽出しない(既知の保留事項)', extractQuantities('1m').length === 0);
+  check('カンマ区切り: 1,500 mmが1500として抽出される',
+    extractQuantities('1,500 mm')[0]?.quantity.lower.value === 1500);
+  {
+    const r = extractQuantities('50±2℃')[0];
+    check('公差表記: 50±2℃が[48,52]の区間になる',
+      r?.quantity.lower.value === 48 && r?.quantity.upper.value === 52);
+  }
+  check('スラッシュ: selection_semanticsがunknown',
+    extractQuantities('50/60 Hz')[0]?.quantity.selection_semantics === 'unknown');
+  {
+    const g = coverageGap(reqRange, stdRange);
+    check('比較結果: provisional=trueが明示される', g.provisional === true && Array.isArray(g.assumptions));
+  }
+
+  assertions.forEach(a => console.log((a.pass ? '[OK] ' : '[FAIL] ') + a.name));
+  const failCount = assertions.filter(a => !a.pass).length;
+  console.log(`\n合計 ${assertions.length}件中 ${assertions.length - failCount}件成功 / ${failCount}件失敗`);
+}
