@@ -9,11 +9,12 @@
 //
 // 依存ライブラリなし。 `node semantic_mapping_prototype.js` で単体実行できる。
 //
-// 【重要な既知の問題】本プロトタイプで工程4aのcoverageGap()を概念グループ単位に
-// 自動適用したところ、coverageGap()自体に比較方向の設計上の欠陥が見つかった。
-// 詳細は quantity_extraction_prototype_review.md の追加レビュー依頼、または
-// 本ファイルのデモ出力末尾を参照。この問題を認識した上で、本プロトタイプの
-// 「工程5への自動橋渡し」部分の結果は温度以外は鵜呑みにしないこと。
+// 【解決済みの問題】本プロトタイプで工程4aのcoverageGap()を概念グループ単位に
+// 自動適用したところ、coverageGap()自体に比較方向の設計上の欠陥が見つかった
+// （片側閾値要求 vs 単一の達成値の比較方向が、範囲vs範囲の比較方向のまま固定されていた）。
+// 工程4a v2.4で、実仕様側の値が「点」か「範囲」かにより比較方向を切り替える修正を行い、解決済み。
+// 詳細は quantity_extraction_prototype.md 5.7節、quantity_extraction_prototype_review.md
+// の追加レビュー依頼を参照。
 
 const { extractQuantities, coverageGap } = require('./quantity_extraction_prototype.js');
 
@@ -228,9 +229,9 @@ if (require.main === module) {
   }
 
   console.log('\n\n########## 4. 工程5への自動橋渡し: グループ内でrequirement×baseline_design×resolved_designを自動比較 ##########');
-  console.log('【注意】coverageGap()は「実仕様の範囲が要求範囲を覆っているか」の方向で固定実装されており、');
-  console.log('温度のような範囲同士の比較には妥当だが、「Xkg以上」のような片側閾値要求と単一の設計値との');
-  console.log('比較には方向が逆であり誤判定を生む(5節「完了条件チェック」の閾値バグ再現テストを参照)。');
+  console.log('【v2.4で解決済み】coverageGap()は、実仕様側の値が「点」(単一の達成値)か「範囲」(能力レンジ)かで');
+  console.log('比較方向を自動的に切り替える(comparison_modeフィールドで明示)。温度のような範囲vs範囲の比較も、');
+  console.log('冷房能力・電圧・周波数・騒音のような片側閾値要求vs達成値の比較も、どちらも正しく動く。');
   for (const g of groups) {
     const req = g.members.find(m => m.role === 'requirement');
     const baseline = g.members.find(m => m.role === 'baseline_design');
@@ -274,15 +275,15 @@ if (require.main === module) {
   check('quantity_recordは文字列でなく工程4aの構造化オブジェクト参照のまま',
     allRecords.every(r => typeof r.quantity_record === 'object' && r.quantity_record.quantity && typeof r.quantity_record.quantity === 'object'));
 
-  // 【重要】coverageGap()の方向性バグの再現テスト。
+  // coverageGap()の方向性バグの回帰テスト(v2.4で修正済み)。
   // 「12kW以上」という片側閾値要求に対し、要求を大幅に超える999kWの設計値を比較すると、
-  // 本来は充足(true)のはずだが、coverageGap()の現行実装は誤って未充足(false)を返す。
+  // 達成値が点(point)であるためpoint_in_regionモードで比較され、正しく充足(true)と判定される。
   {
     const req = extractQuantities('冷房能力12 kW以上を確保すること')[0];
     const farExceeding = extractQuantities('冷房能力999 kW')[0];
     const g = coverageGap(req, farExceeding);
-    check('【既知の不具合・未修正】999kWは12kW以上の要求を満たすはずが、現行coverageGap()はfalseを返す(検出用アサーション。この行がFAILしなくなったら修正が入った合図)',
-      g.satisfied === false);
+    check('【v2.4で修正済み】999kWは12kW以上の要求を満たす(point_in_regionモードで正しく充足と判定される)',
+      g.satisfied === true && g.comparison_mode === 'point_in_region');
   }
 
   assertions.forEach(a => console.log((a.pass ? '[OK] ' : '[FAIL] ') + a.name));
