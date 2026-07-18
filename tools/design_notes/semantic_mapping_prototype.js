@@ -192,9 +192,16 @@ const ACTUAL_SEMANTICS_RULES = [
   // 均してしまうため(平均が規格内でも、個々の実測値は規格外の可能性がある)、COMPARISON_MODE_
   // DERIVATION_TABLEには意図的に追加せず、要求側とのペアからcomparisonModeを一切導出しない
   // (v2.10でrequired_capability_domain×achieved_pointを安全側の理由で除外したのと同じ設計)。
-  { value: 'aggregated_representative_value', weight: 0.1, evidenceType: 'quantity_shape',
-    match: (text, quantity) => isGenuinePoint(quantity) },
-  { value: 'aggregated_representative_value', weight: 0.5, evidenceType: 'keyword',
+  //
+  // v2.19(再レビュー軽微な改善提案への対応): 当初は「点である」という構造的根拠(0.1)を
+  // 無条件のquantity_shapeルールとして追加していたが、これだと統計語が一切現れない
+  // 通常の点(「実測25℃」等)にまで、無関係なaggregated_representative_value候補(0.1)が
+  // 常に付いてしまい、候補配列のノイズになるという指摘を受けた(自動判定の安全性には
+  // 影響しないが、候補配列の明瞭さを損なう)。統計語自体が「これは集計値である」ことを
+  // 直接示す強い根拠であり、構造的根拠を別立てにする理由(他の値と違いshapeだけでは
+  // 閾値を超えさせない、という8.11節の非対称設計)もこの値には当てはまらない
+  // (auto_applicableの対象に一切していないため)。キーワードルール1本(重み0.6)へ統合した。
+  { value: 'aggregated_representative_value', weight: 0.6, evidenceType: 'keyword',
     match: (text, quantity) => isGenuinePoint(quantity) &&
       hasUnnegatedKeywordMatch(text, /代表値|平均値|中央値|最頻値/) },
 ];

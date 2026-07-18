@@ -54,10 +54,12 @@
 //        (A=アンペア、L=リットル)も候補に挙がったが、実データへ適用したところ鋼種型番
 //        (SUS304L等)と衝突し誤検出になることが判明したため追加を見送った(詳細は5.14節)。
 // v2.12: レビューで「JIS Z 8000シリーズ(量及び単位)を単位ホワイトリストのマスターデータとして
-//        活用すべき」との指摘を受け、単位辞書の各エントリが対応するJIS Z 8000の部(第3〜8部)を
-//        コメントとして整理した(コードの構造は変更なし)。あわせて、㎡・㎥等のCJK互換文字は
-//        実データに一度も出現しなかったため追加を見送り、将来追加する場合の正規形の方針
-//        (JIS Z 8000に倣いm²・m³側へ統一する)を記録した(詳細は5.15節)。
+//        活用すべき」との指摘を受け、単位辞書の各エントリへJIS Z 8000の対応する部(第3〜8部)を
+//        `standard_ref`フィールドとして追加した(当初はコメントのみで済ませていたが、再レビューで
+//        「コードから参照・検証・出力できないものはマスターデータと言えない」と指摘され、実際の
+//        フィールド化に修正した)。あわせて、㎡・㎥等のCJK互換文字は実データに一度も出現しな
+//        かったため追加を見送り、将来追加する場合の正規形の方針(JIS Z 8000に倣いm²・m³側へ
+//        統一する)を記録した(詳細は5.15節)。
 // 依存ライブラリなし。 `node quantity_extraction_prototype.js` で単体実行できる。
 
 // v2.11(実データ検証で発見): real_corpus_validation.js(8.18節)で、国土交通省「公共建築工事
@@ -73,12 +75,12 @@
 // アルファベット1文字だけの単位記号は、型番・合金成分比率・製品コード等の数字列と衝突しやすく、
 // 実データで安全性を確認できなかったため追加を見送った(8.12節・8.17節と同じ「実データで
 // 検証できない拡張は行わない」原則。詳細はsemantic_mapping_prototype.md 8.19節を参照)。
-// v2.12(5.15節): 単位辞書を「量及び単位」を定めるJIS Z 8000規格群(全12部)を参照する
-// マスターデータとして整理した。`dimension`は、比較可能性(同じ次元かどうか)の判定に使う
-// 内部的な識別子であり、対応するJIS Z 8000の部を右列にコメントとして記録する
-// (`dimension`文字列自体はJIS用語を直接コピーしたものではなく、コード内で扱いやすい
-// 英語識別子のままとした。将来この対応表を機械可読にする場合も、この対応関係をそのまま
-// 使える)。
+// v2.12(5.15節): 単位辞書を「量及び単位」を定めるJIS Z 8000規格群(全12部)への参照付き
+// マスターデータへ整理した。各エントリに`standard_ref`(対応するJIS Z 8000の部とカテゴリ名)を
+// 構造化データとして追加した(v2.12当初はコメントのみで済ませていたが、再レビューで
+// 「コードから参照・検証・出力できないものはマスターデータとは言えない」と指摘され、実際に
+// フィールド化した)。`dimension`は比較可能性(同じ次元かどうか)の判定に使う内部識別子で、
+// 引き続きJIS用語を直接コピーしたものではなく英語識別子のままとしている。
 //   temperature(温度)              → JIS Z 8000-5(熱力学)
 //   length(長さ)                   → JIS Z 8000-3(空間及び時間)
 //   power(仕事率)・pressure(圧力)   → JIS Z 8000-4(力学)
@@ -96,24 +98,35 @@
 // 場合は、canonical形式はJIS Z 8000に倣いm²・m³側に統一する(㎡→m²であって、その逆ではない)
 // ことを、あらかじめここに設計方針として記録しておく。
 const UNIT_DEFS = [
-  { source: '°C', canonical: 'degC', dimension: 'temperature' },
-  { source: '℃', canonical: 'degC', dimension: 'temperature' },
-  { source: 'kW', canonical: 'kW', dimension: 'power' },
-  { source: 'V', canonical: 'V', dimension: 'voltage' },
-  { source: 'Hz', canonical: 'Hz', dimension: 'frequency' },
-  { source: 'dB(A)', canonical: 'dB(A)', dimension: 'sound_pressure_level' },
-  { source: 'mm', canonical: 'mm', dimension: 'length' },
-  { source: 'MPa', canonical: 'MPa', dimension: 'pressure' },
-  { source: 'kPa', canonical: 'kPa', dimension: 'pressure' },
-  { source: 'Pa', canonical: 'Pa', dimension: 'pressure' },
-  { source: 'kVA', canonical: 'kVA', dimension: 'apparent_power' },
+  { source: '°C', canonical: 'degC', dimension: 'temperature',
+    standard_ref: { standard: 'JIS Z 8000-5', category: 'thermodynamics' } },
+  { source: '℃', canonical: 'degC', dimension: 'temperature',
+    standard_ref: { standard: 'JIS Z 8000-5', category: 'thermodynamics' } },
+  { source: 'kW', canonical: 'kW', dimension: 'power',
+    standard_ref: { standard: 'JIS Z 8000-4', category: 'mechanics' } },
+  { source: 'V', canonical: 'V', dimension: 'voltage',
+    standard_ref: { standard: 'JIS Z 8000-6', category: 'electromagnetism' } },
+  { source: 'Hz', canonical: 'Hz', dimension: 'frequency',
+    standard_ref: { standard: 'JIS Z 8000-3', category: 'space_and_time' } },
+  { source: 'dB(A)', canonical: 'dB(A)', dimension: 'sound_pressure_level',
+    standard_ref: { standard: 'JIS Z 8000-8', category: 'acoustics' } },
+  { source: 'mm', canonical: 'mm', dimension: 'length',
+    standard_ref: { standard: 'JIS Z 8000-3', category: 'space_and_time' } },
+  { source: 'MPa', canonical: 'MPa', dimension: 'pressure',
+    standard_ref: { standard: 'JIS Z 8000-4', category: 'mechanics' } },
+  { source: 'kPa', canonical: 'kPa', dimension: 'pressure',
+    standard_ref: { standard: 'JIS Z 8000-4', category: 'mechanics' } },
+  { source: 'Pa', canonical: 'Pa', dimension: 'pressure',
+    standard_ref: { standard: 'JIS Z 8000-4', category: 'mechanics' } },
+  { source: 'kVA', canonical: 'kVA', dimension: 'apparent_power',
+    standard_ref: { standard: 'JIS Z 8000-6', category: 'electromagnetism' } },
 ];
 const UNIT_ALT = '°C|℃|kW|kVA|V|Hz|dB\\(A\\)|mm|MPa|kPa|Pa';
 
 function unitInfo(raw) {
   const def = UNIT_DEFS.find(u => u.source === raw);
-  return def ? { source: raw, canonical: def.canonical, dimension: def.dimension }
-             : { source: raw, canonical: raw, dimension: 'unknown' };
+  return def ? { source: raw, canonical: def.canonical, dimension: def.dimension, standard_ref: def.standard_ref }
+             : { source: raw, canonical: raw, dimension: 'unknown', standard_ref: null };
 }
 
 // 文脈トークン(周辺語)。将来はドメイン別に拡張する前提の暫定リスト。
@@ -580,7 +593,7 @@ function coverageGap(requirement, actual, options = {}) {
   };
 }
 
-module.exports = { extractQuantities, coverageGap, unitInfo, normalizeText1to1, isGenuinePoint, isEmptyInterval };
+module.exports = { extractQuantities, coverageGap, unitInfo, normalizeText1to1, isGenuinePoint, isEmptyInterval, UNIT_DEFS };
 
 // ── 単体実行時のデモ・テスト出力 ──
 if (require.main === module) {
@@ -945,6 +958,19 @@ if (require.main === module) {
     // 再び型番との衝突が起きることを防ぐ検出ではなく、少なくとも現状の非対応を記録する)。
     check('単位辞書からの意図的な除外(v2.11): 「SUS304L」から数量304+Lを抽出しない(鋼種型番のため)',
       extractQuantities('JISG4305によるSUS304L又はSUS316Lとする').length === 0);
+  }
+
+  // ── v2.12(5.15節、再レビュー必須修正): 単位マスターデータ(standard_ref)がコメントではなく
+  // 実際のフィールドとしてコード・実行時から参照・検証できることを確認する ──
+  {
+    check('単位マスターデータ(v2.12): UNIT_DEFSの全エントリがstandard_refを持つ',
+      UNIT_DEFS.every(u => u.standard_ref && u.standard_ref.standard && u.standard_ref.category));
+    check('単位マスターデータ(v2.12): unitInfo(\'MPa\')がJIS Z 8000-4(力学)を実行時に参照できる',
+      unitInfo('MPa').standard_ref.standard === 'JIS Z 8000-4' && unitInfo('MPa').standard_ref.category === 'mechanics');
+    check('単位マスターデータ(v2.12): 同じdimension(pressure)のMPa/kPa/Paは同じstandard_refを共有する',
+      new Set(['MPa', 'kPa', 'Pa'].map(s => unitInfo(s).standard_ref.standard)).size === 1);
+    check('単位マスターデータ(v2.12): 未知の単位のstandard_refはnullを返す(存在しない参照をでっち上げない)',
+      unitInfo('N').standard_ref === null);
   }
 
   assertions.forEach(a => console.log((a.pass ? '[OK] ' : '[FAIL] ') + a.name));
