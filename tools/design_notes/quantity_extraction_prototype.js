@@ -216,8 +216,10 @@ function extractFromSentence(sentenceText, sentenceOffset, fullOriginal) {
       if (prefix === '最大' || prefix === '最小') warnings.push(`「${prefix}」を片側境界候補として抽出。文脈による確定が必要`);
       if (prefix === '公称') warnings.push('「公称」表記のため、実測値・保証値との混同に注意');
       raws.push({
+        // v2.2: 最大/最小由来の境界も_boundSideへ反映し、以上/以下と同様に隣接統合の対象にする
+        // （統合後も qualifiers/warnings は引き継がれ、confidenceは自動的に低いまま保たれる）。
         startLocal: spanStart, endLocal: spanEnd, quantity, unit: unitInfo(u), warnings,
-        qualifiers, _boundSide: opWord ? bound.side : null,
+        qualifiers, _boundSide: bound ? bound.side : null,
       });
       markConsumed(spanStart, spanEnd);
     }
@@ -458,6 +460,14 @@ if (require.main === module) {
     check('最小値候補: 最小10kWを下限10の片側区間として保持',
       r?.source_text === '最小10kW' && r?.quantity.lower?.value === 10 &&
       r?.quantity.upper === null && r?.qualifiers?.[0]?.type === 'minimum');
+  }
+  {
+    // v2.2: 最大/最小由来の隣接した片側境界も、以上/以下と同様に1つの区間へ統合する
+    const rs = extractQuantities('最小0℃最大50℃');
+    check('最大/最小の統合: 隣接する最小・最大が1件のintervalになる',
+      rs.length === 1 && rs[0].quantity.lower?.value === 0 && rs[0].quantity.upper?.value === 50);
+    check('最大/最小の統合: 統合後も確信度は低いまま(qualifiers由来のwarningsが残る)',
+      rs[0]?.extraction.confidence === 0.6 && rs[0]?.extraction.warnings.length === 2);
   }
   {
     const reqClosed = extractQuantities('0℃以上50℃以下')[0];
