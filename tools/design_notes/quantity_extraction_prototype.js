@@ -1,4 +1,4 @@
-// 工程4a（数量抽出）たたき台プロトタイプ v2.9
+// 工程4a（数量抽出）たたき台プロトタイプ v2.10
 // tools/design_notes/quantity_extraction_prototype_review.md の必須修正6項目
 // （符号付き数値／区間統合／境界包含区分／原文保持／暫定判定明示／条件誤伝播防止）
 // および、そのレビュー過程で追加発見した2件（±公差、桁区切りカンマ）を反映。
@@ -44,6 +44,10 @@
 //       数値として抽出される不具合を発見)。あわせて、isGenuinePoint/isEmptyIntervalを
 //       exportし、工程3プロトタイプがcoverageGap()と同じ「点」「空区間」の定義を再利用
 //       できるようにした。
+// v2.10: 公開実データ(国土交通省「公共建築工事標準仕様書」)での検証中に、見出し番号と値が
+//        区切りなく結合したテキスト(「表2.1.9200V」)から無意味な数量「1.9200V」を誤って
+//        抽出する不具合を発見。数値トークンの先頭に、直前が数字・ピリオドでないことを要求
+//        する境界チェックを追加して対応(詳細は5.13節参照)。
 // 依存ライブラリなし。 `node quantity_extraction_prototype.js` で単体実行できる。
 
 const UNIT_DEFS = [
@@ -82,6 +86,13 @@ function parseNumber(numStr) {
 
 // 符号・桁区切りカンマ・小数に対応した数値トークン（レビュー2.1、および追加発見のカンマ区切りバグへの対応）
 const NUM = '(-?\\d{1,3}(?:,\\d{3})*(?:\\.\\d+)?|-?\\d+(?:\\.\\d+)?)';
+// 実データ検証(国土交通省「公共建築工事標準仕様書」)で発見: 見出し番号と値がPDF由来のテキストで
+// 区切りなく結合している場合(例:「表2.1.9200V・400V…」の"表2.1.9"に続けて"200V"が現れる)、
+// NUMは数字列の途中(直前が数字・ピリオド)からでも一致してしまい、「1.9200V」のような無意味な
+// 数量を誤って抽出していた。各正規表現の先頭(スキャン開始点となる最初のNUM)にのみ、直前が
+// 数字・ピリオドでないことを要求する境界チェックを課す(2番目以降のNUMは~・±・/・「から」等の
+// 記号区切りが直前にあるため、この問題は起きない)。
+const NUM_AT_BOUNDARY = '(?<![\\d.])' + NUM;
 
 function splitSentences(text) {
   // 句点等の直後で分割し、各文の絶対オフセットを保持する。
@@ -129,7 +140,7 @@ function extractFromSentence(sentenceText, sentenceOffset, fullOriginal) {
 
   // 1. 範囲: "X~Y unit"（unitはX側にあってもなくてもよい。canonicalで比較。レビュー3.1への対応）
   {
-    const re = new RegExp(`${NUM}\\s*(${UNIT_ALT})?\\s*~\\s*${NUM}\\s*(${UNIT_ALT})`, 'g');
+    const re = new RegExp(`${NUM_AT_BOUNDARY}\\s*(${UNIT_ALT})?\\s*~\\s*${NUM}\\s*(${UNIT_ALT})`, 'g');
     let m;
     while ((m = re.exec(norm))) {
       const [full, lo, uLo, hi, uHi] = m;
@@ -152,7 +163,7 @@ function extractFromSentence(sentenceText, sentenceOffset, fullOriginal) {
 
   // 1b. "Xunitから Yunitまで"（両側とも単位あり、canonicalで比較。まで、は任意）
   {
-    const re = new RegExp(`${NUM}\\s*(${UNIT_ALT})\\s*から\\s*${NUM}\\s*(${UNIT_ALT})\\s*(まで)?`, 'g');
+    const re = new RegExp(`${NUM_AT_BOUNDARY}\\s*(${UNIT_ALT})\\s*から\\s*${NUM}\\s*(${UNIT_ALT})\\s*(まで)?`, 'g');
     let m;
     while ((m = re.exec(norm))) {
       const [full, lo, uLo, hi, uHi] = m;
@@ -174,7 +185,7 @@ function extractFromSentence(sentenceText, sentenceOffset, fullOriginal) {
 
   // 2. ±公差: "X±Y unit" → 区間[X-Y, X+Y]。レビュー後の追加発見バグ(値の取り違え)への対応。
   {
-    const re = new RegExp(`${NUM}\\s*±\\s*${NUM}\\s*(${UNIT_ALT})`, 'g');
+    const re = new RegExp(`${NUM_AT_BOUNDARY}\\s*±\\s*${NUM}\\s*(${UNIT_ALT})`, 'g');
     let m;
     while ((m = re.exec(norm))) {
       const [full, nominal, tol, u] = m;
@@ -193,7 +204,7 @@ function extractFromSentence(sentenceText, sentenceOffset, fullOriginal) {
 
   // 3. 並列値: "X/Y unit"（意味は未確定のまま保持。レビュー3.2への対応）
   {
-    const re = new RegExp(`${NUM}\\s*/\\s*${NUM}\\s*(${UNIT_ALT})`, 'g');
+    const re = new RegExp(`${NUM_AT_BOUNDARY}\\s*/\\s*${NUM}\\s*(${UNIT_ALT})`, 'g');
     let m;
     while ((m = re.exec(norm))) {
       const [full, a, b, u] = m;
@@ -211,7 +222,7 @@ function extractFromSentence(sentenceText, sentenceOffset, fullOriginal) {
 
   // 4. 単一値 + 比較演算子(以上/以下/未満/超える) + 約
   {
-    const re = new RegExp(`${NUM}\\s*(${UNIT_ALT})`, 'g');
+    const re = new RegExp(`${NUM_AT_BOUNDARY}\\s*(${UNIT_ALT})`, 'g');
     let m;
     while ((m = re.exec(norm))) {
       const [full, numStr, u] = m;
@@ -842,6 +853,22 @@ if (require.main === module) {
       gPoint.comparison_mode === 'point_in_region' &&
       gActualCovers.comparison_mode === 'actual_covers_requirement' &&
       gReqCovers.comparison_mode === 'requirement_covers_actual');
+  }
+
+  // ── 実データ検証(国土交通省「公共建築工事標準仕様書」)で発見した必須修正の回帰テスト ──
+  // 見出し番号と値がPDF由来のテキストで区切りなく結合している場合(「表2.1.9200V・400V…」)、
+  // 修正前はNUMが数字列の途中から一致し、「1.9200V」という無意味な数量を誤って抽出していた。
+  {
+    const rs = extractQuantities('表2.1.9200V・400V三相誘導電動機の始動方式');
+    check('実データ回帰: 「表2.1.9200V・400V」から無意味な「1.9200V」を抽出しない',
+      !rs.some(r => r.source_text === '1.9200V'));
+    check('実データ回帰: 「表2.1.9200V・400V」から正しく「400V」は抽出できる',
+      rs.some(r => r.source_text === '400V' && r.quantity.lower.value === 400));
+    // 数字が直前にあっても、単位が直後になければ元々マッチしない(境界チェックのしすぎで
+    // 正当な数量を潰していないことの確認)
+    const normal = extractQuantities('周囲温度50 °Cで12.5 kW')[0];
+    check('回帰防止: 通常の小数点付き数量(12.5 kW)は境界チェック追加後も正しく抽出される',
+      !!normal);
   }
 
   assertions.forEach(a => console.log((a.pass ? '[OK] ' : '[FAIL] ') + a.name));
