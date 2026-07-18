@@ -9,12 +9,18 @@
 //
 // 依存ライブラリなし。 `node semantic_mapping_prototype.js` で単体実行できる。
 //
-// 【解決済みの問題】本プロトタイプで工程4aのcoverageGap()を概念グループ単位に
-// 自動適用したところ、coverageGap()自体に比較方向の設計上の欠陥が見つかった
-// （片側閾値要求 vs 単一の達成値の比較方向が、範囲vs範囲の比較方向のまま固定されていた）。
-// 工程4a v2.4で、実仕様側の値が「点」か「範囲」かにより比較方向を切り替える修正を行い、解決済み。
-// 詳細は quantity_extraction_prototype.md 5.7節、quantity_extraction_prototype_review.md
-// の追加レビュー依頼を参照。
+// 【対応状況】本プロトタイプで工程4aのcoverageGap()を概念グループ単位に自動適用したところ、
+// coverageGap()自体に比較方向の設計上の欠陥が見つかった（片側閾値要求 vs 単一の達成値が
+// 誤判定されていた）。工程4a v2.4で、実仕様側の値が「点」か「範囲」かにより比較方向を切り替える
+// 修正を行ったが、外部レビューにより「両側区間もその意味(対応可能領域か変動範囲か)が未確定」
+// という追加指摘を受け、v2.5〜v2.6でcoverageGap()に第3引数optionsを追加し、明示的なmode指定が
+// ない両側区間は自動判定せず比較不能を返すよう変更した。この結果、本プロトタイプの4章の自動
+// 橋渡しループは、温度(両側区間どうしの比較)をmodeなしでは比較できなくなっている
+// （5章のアサーションでは、既知の前提としてmodeを明示的に渡して数値ロジックを検証している）。
+// これは「区間の意味候補(interval_semantics)を工程3が生成しない限り、工程5の自動橋渡しは
+// 安全に動かせない」という、レビューの最終的な結論を実データで裏付けている。
+// 詳細は quantity_extraction_prototype.md 5.8〜5.9節、quantity_extraction_prototype_review.md
+// 0.4〜0.5節を参照。
 
 const { extractQuantities, coverageGap } = require('./quantity_extraction_prototype.js');
 
@@ -229,9 +235,12 @@ if (require.main === module) {
   }
 
   console.log('\n\n########## 4. 工程5への自動橋渡し: グループ内でrequirement×baseline_design×resolved_designを自動比較 ##########');
-  console.log('【v2.4で解決済み】coverageGap()は、実仕様側の値が「点」(単一の達成値)か「範囲」(能力レンジ)かで');
-  console.log('比較方向を自動的に切り替える(comparison_modeフィールドで明示)。温度のような範囲vs範囲の比較も、');
-  console.log('冷房能力・電圧・周波数・騒音のような片側閾値要求vs達成値の比較も、どちらも正しく動く。');
+  console.log('【v2.6時点の制約】coverageGap()は、達成値(単一の点)との比較はcomparisonMode指定なしで');
+  console.log('自動判定できるが(冷房能力・電圧・周波数・騒音)、両側区間どうしの比較(温度)は、');
+  console.log('その区間が「対応可能領域」か「変動範囲」かをこのループ自体が知らないため、');
+  console.log('comparisonModeを渡さない限り自動では判定せずcomparable:falseを返す(意図的な安全策)。');
+  console.log('これは、区間の意味候補(interval_semantics)を工程3が生成しない限り、工程5の自動橋渡しが');
+  console.log('温度のような両側区間の比較には使えないことを、実データで示している。');
   for (const g of groups) {
     const req = g.members.find(m => m.role === 'requirement');
     const baseline = g.members.find(m => m.role === 'baseline_design');
@@ -255,13 +264,17 @@ if (require.main === module) {
   const tempReq = tempGroup?.members.find(m => m.role === 'requirement');
   const tempBaseline = tempGroup?.members.find(m => m.role === 'baseline_design');
   const tempResolved = tempGroup?.members.find(m => m.role === 'resolved_design');
+  // v2.6: 温度の要求・実仕様は両方とも「対応可能領域」であることが分かっているため、
+  // comparisonMode: 'actual_covers_requirement'を明示する。本来この判断は工程3の
+  // interval_semantics候補生成が担うべきものであり、ここでは既知の前提として仮に固定している
+  // （4章の自動橋渡しループはこの前提を持たないため、comparable:falseを返すことに注意）。
   if (tempReq && tempBaseline) {
-    const g1 = coverageGap(tempReq.quantity_record, tempBaseline.quantity_record);
-    check('自動グルーピング経由でも「標準機種は10℃不足」を再現(範囲vs範囲は正しく動く)', g1.satisfied === false && g1.highGap === 10);
+    const g1 = coverageGap(tempReq.quantity_record, tempBaseline.quantity_record, { comparisonMode: 'actual_covers_requirement' });
+    check('自動グルーピング経由でも「標準機種は10℃不足」を再現(comparisonMode明示時は正しく動く)', g1.satisfied === false && g1.highGap === 10);
   }
   if (tempReq && tempResolved) {
-    const g2 = coverageGap(tempReq.quantity_record, tempResolved.quantity_record);
-    check('自動グルーピング経由でも「検討結果は充足」を再現(範囲vs範囲は正しく動く)', g2.satisfied === true && g2.highGap === 0);
+    const g2 = coverageGap(tempReq.quantity_record, tempResolved.quantity_record, { comparisonMode: 'actual_covers_requirement' });
+    check('自動グルーピング経由でも「検討結果は充足」を再現(comparisonMode明示時は正しく動く)', g2.satisfied === true && g2.highGap === 0);
   }
 
   const coolingGroup = groups.find(g => g.concept_id === 'performance.cooling_capacity');
@@ -284,6 +297,15 @@ if (require.main === module) {
     const g = coverageGap(req, farExceeding);
     check('【v2.4で修正済み】999kWは12kW以上の要求を満たす(point_in_regionモードで正しく充足と判定される)',
       g.satisfied === true && g.comparison_mode === 'point_in_region');
+  }
+
+  // v2.6: 外部レビュー指摘の回帰テスト。両側区間どうしの比較(温度)は、区間の意味候補を
+  // 持たないこの工程3プロトタイプ単体では、comparisonModeを明示しない限り自動判定できない
+  // ことを、4章の自動橋渡しループと同じ呼び出し方(mode未指定)で確認する。
+  if (tempReq && tempBaseline) {
+    const g = coverageGap(tempReq.quantity_record, tempBaseline.quantity_record);
+    check('【v2.6で追加確認】両側区間(温度)はcomparisonMode未指定では自動橋渡しループも比較不能を返す',
+      g.comparable === false);
   }
 
   assertions.forEach(a => console.log((a.pass ? '[OK] ' : '[FAIL] ') + a.name));
