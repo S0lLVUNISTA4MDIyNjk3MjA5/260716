@@ -1,4 +1,4 @@
-// 工程4a（数量抽出）たたき台プロトタイプ v2.12
+// 工程4a（数量抽出）たたき台プロトタイプ v2.13
 // tools/design_notes/quantity_extraction_prototype_review.md の必須修正6項目
 // （符号付き数値／区間統合／境界包含区分／原文保持／暫定判定明示／条件誤伝播防止）
 // および、そのレビュー過程で追加発見した2件（±公差、桁区切りカンマ）を反映。
@@ -60,6 +60,9 @@
 //        フィールド化に修正した)。あわせて、㎡・㎥等のCJK互換文字は実データに一度も出現しな
 //        かったため追加を見送り、将来追加する場合の正規形の方針(JIS Z 8000に倣いm²・m³側へ
 //        統一する)を記録した(詳細は5.15節)。
+// v2.13: 再レビューの軽微な将来改善提案「本体統合時に不変マスターとして扱うならUNIT_DEFSを
+//        凍結すべき」に対応し、配列・各エントリ・各standard_refの3階層をObject.freeze()した。
+//        承認を妨げる指摘ではなかったが、変更コストが小さく安全性が上がるため反映した。
 // 依存ライブラリなし。 `node quantity_extraction_prototype.js` で単体実行できる。
 
 // v2.11(実データ検証で発見): real_corpus_validation.js(8.18節)で、国土交通省「公共建築工事
@@ -120,7 +123,8 @@ const UNIT_DEFS = [
     standard_ref: { standard: 'JIS Z 8000-4', category: 'mechanics' } },
   { source: 'kVA', canonical: 'kVA', dimension: 'apparent_power',
     standard_ref: { standard: 'JIS Z 8000-6', category: 'electromagnetism' } },
-];
+].map(u => Object.freeze({ ...u, standard_ref: Object.freeze(u.standard_ref) }));
+Object.freeze(UNIT_DEFS);
 const UNIT_ALT = '°C|℃|kW|kVA|V|Hz|dB\\(A\\)|mm|MPa|kPa|Pa';
 
 function unitInfo(raw) {
@@ -971,6 +975,24 @@ if (require.main === module) {
       new Set(['MPa', 'kPa', 'Pa'].map(s => unitInfo(s).standard_ref.standard)).size === 1);
     check('単位マスターデータ(v2.12): 未知の単位のstandard_refはnullを返す(存在しない参照をでっち上げない)',
       unitInfo('N').standard_ref === null);
+    // v2.13(軽微な将来改善への対応): 外部にエクスポートしたUNIT_DEFSは、本体統合時に
+    // 不変マスターとして扱えるよう、配列・各エントリ・各standard_refの3階層を凍結してある。
+    // 非strictモードでは変更操作が例外を投げず黙って無視されるため、「変更を試みた後も
+    // 元の値のまま」であることを確認する形でテストする。
+    const originalDimension = UNIT_DEFS[0].dimension;
+    const originalLength = UNIT_DEFS.length;
+    // Array.prototype.pushは非拡張オブジェクトに対して、strict/非strictを問わず必ず例外を
+    // 投げる(単純な代入と異なり[[DefineOwnProperty]]の失敗が無条件で例外になるため)。
+    let pushThrew = false;
+    try { UNIT_DEFS.push({ source: 'X', canonical: 'X', dimension: 'tampered' }); }
+    catch (e) { pushThrew = true; }
+    UNIT_DEFS[0].dimension = 'tampered';
+    UNIT_DEFS[0].standard_ref.standard = 'tampered';
+    check('単位マスターデータの不変性(v2.13): UNIT_DEFSは配列・エントリ・standard_refの3階層とも凍結されており、変更を試みても元の値のまま',
+      pushThrew &&
+      UNIT_DEFS[0].dimension === originalDimension &&
+      UNIT_DEFS[0].standard_ref.standard !== 'tampered' &&
+      UNIT_DEFS.length === originalLength);
   }
 
   assertions.forEach(a => console.log((a.pass ? '[OK] ' : '[FAIL] ') + a.name));
