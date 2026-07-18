@@ -36,7 +36,11 @@
 // 積み上げる設計へ拡張した。列の役割(出典列が'検討結果'かどうか)は弱い根拠(0.05)に留め、
 // セル内に達成値であることを積極的に示す語(実測/達成値/検討の結果等)がある場合のみ、閾値を
 // 超えられる強い根拠(0.4)を与える。構造的根拠(形・列名)だけでは決して閾値を超えない設計は
-// 維持している。詳細は8.8〜8.10節を参照。
+// 維持している。v2.13(8.12節)では、実際の客先文書サンプルは用意できなかったため、代わりに
+// JIS計測用語(JIS Z 8103)・検査成績書の実務慣行をインターネット調査し、肯定語(検査結果/
+// 試験結果/実績値/成績値)と否定語(規格値/基準値/目標値/設計値)を語彙として追加した。
+// 代表値・中央値・平均値はJIS統計用語上「複数の測定を要約した値」であり単一の達成値と
+// 同一視できないため、意図的にどちらの辞書にも加えていない。詳細は8.8〜8.12節を参照。
 
 const { extractQuantities, coverageGap, isGenuinePoint, isEmptyInterval } = require('./quantity_extraction_prototype.js');
 
@@ -92,8 +96,14 @@ const ACTUAL_SEMANTICS_RULES = [
   // セル内に達成値であることを積極的に示す語がある場合のみ、自動適用の閾値を超えられる
   // 強い根拠を与える。「点である」構造的根拠と組み合わせて初めて高確信度に達する設計とし、
   // 構造的根拠(形・列名)だけでは決して閾値を超えないようにしている。
+  // v2.13(8.12節): JIS計測用語・検査成績書の実務用語を調査し、肯定語の語彙を拡張した。
+  // 「試験結果」「検査結果」は実施した試験・検査で得た値を指す点で「実測」と同義だが、
+  // 「試験」単体（否定根拠の語彙にある）とは意味が異なるため、後述のNEGATIVE_KEYWORD_RULESの
+  // 「試験」パターンには「試験結果」を含めないよう除外している。「測定結果」「測定値」は
+  // 既存のoutcome_range(変動・ばらつきの意味)の語彙と重複するため、ここには含めない。
   { value: 'achieved_point', weight: 0.4, evidenceType: 'keyword',
-    match: (text, quantity) => isGenuinePoint(quantity) && /実測|達成値|検討の結果|測定した結果/.test(text) },
+    match: (text, quantity) => isGenuinePoint(quantity) &&
+      /実測|達成値|検討の結果|測定した結果|試験結果|検査結果|実績値|成績値/.test(text) },
   { value: 'capability_domain', weight: 0.55, evidenceType: 'keyword',
     match: (text, quantity) => isTwoSidedRange(quantity) && /使用可能|対応可能|運転可能/.test(text) },
   { value: 'capability_domain', weight: 0.1, evidenceType: 'quantity_shape',
@@ -129,8 +139,13 @@ const CONDITION_SEMANTICS_RULES = [
 // という既定の解釈に疑問を投げかける語であり(設定値・公称値・試験条件は、必ずしも
 // 実測された達成値ではない)、参考値・目安と同じ性質の否定根拠として扱う。重みも
 // -0.3→-0.4へ強化し、「参考値58dB(A)」のようなケースでunknownと確実に差が付くようにした。
+// v2.13(8.12節): JIS計測用語・検査成績書の実務用語調査により、「規格値」「基準値」
+// 「目標値」「設計値」も、実測値と混同されやすい非達成値の語として追加した(規格値＝要求
+// 許容範囲、目標値＝開発時点の目安、設計値＝理論上の理想値であり、いずれも実測結果ではない)。
+// 「試験」は「試験結果」（達成値を示す肯定語、上記ACTUAL_SEMANTICS_RULES参照）を否定しない
+// よう、否定先読みで除外した。
 const NEGATIVE_KEYWORD_RULES = [
-  { pattern: /参考値|目安|概算|設定|公称|試験/, weight: -0.4, label: '達成値との混同に注意を要する語' },
+  { pattern: /参考値|目安|概算|設定|公称|試験(?!結果)|規格値|基準値|目標値|設計値/, weight: -0.4, label: '達成値との混同に注意を要する語' },
 ];
 
 const UNKNOWN_BASELINE_CONFIDENCE = 0.15;
@@ -155,9 +170,11 @@ function scoreSemantics(rules, text, record, ctx) {
   for (const rule of rules) {
     if (rule.match(text, quantity, record, ctx)) bump(rule.value, rule.weight, rule.evidenceType, 'supports');
   }
-  // 条件節(role='condition')では「試験」「測定」がtest_conditionの正の根拠として使われるため、
-  // 実仕様側向けの否定根拠(達成値との混同注意語)はここでは適用しない。
-  if (!ctx.isConditionValue) {
+  // 否定根拠(達成値との混同注意語)は、実仕様側(side='B')のachieved_point等の解釈に疑問を
+  // 投げかけるための語彙であり、要求側(side='A')の候補(acceptable_region等)には元々
+  // 対応する「既定の達成値解釈」が無いため適用対象ではない。条件節(role='condition')では
+  // 「試験」「測定」がtest_conditionの正の根拠として使われるため、ここでも適用しない。
+  if (ctx.side === 'B' && !ctx.isConditionValue) {
     for (const neg of NEGATIVE_KEYWORD_RULES) {
       if (neg.pattern.test(text)) {
         for (const value of [...scores.keys()]) bump(value, neg.weight, 'negative_keyword', 'opposes');
@@ -786,6 +803,46 @@ if (require.main === module) {
       cResolved[0].confidence === 0.35 && cBaseline[0].confidence === 0.3);
     check('列の役割: 検討結果列という列名だけの根拠(形+列)では、自動適用の閾値(0.4)には届かない',
       cResolved[0].confidence < 0.4);
+  }
+
+  // ── v2.13(8.12節): JIS計測用語・検査成績書調査に基づく肯定語・否定語辞書拡張の回帰テスト ──
+  {
+    // 新規追加した肯定語(検査結果/試験結果/実績値/成績値)は、いずれもachieved_pointを
+    // 高確信度(0.7)にし、auto_applicableになることを確認する。
+    const positiveKeywordCases = ['検査結果は58 dB(A)', '試験結果は220 V', '実績値は12.5 kW', '成績値は58 dB(A)'];
+    for (const t of positiveKeywordCases) {
+      const r = extractQuantities(t).find(x => x.quantity.kind === 'interval');
+      const c = generateIntervalSemanticsCandidates(r, { side: 'B', nearbyText: t });
+      check(`肯定語拡張: 「${t}」はachieved_point:0.70で候補になる`,
+        c[0].value === 'achieved_point' && c[0].confidence === 0.7);
+    }
+    // 「試験結果」は「試験」(否定根拠)に巻き込まれず肯定語として機能することの確認
+    // (否定根拠の正規表現に否定先読み`試験(?!結果)`を追加した効果)。
+    const testResultRecord = extractQuantities('試験結果は220 V')[0];
+    check('肯定語拡張: 「試験結果」は「試験」の否定根拠に巻き込まれない(試験結果≠試験)',
+      generateIntervalSemanticsCandidates(testResultRecord, { side: 'B', nearbyText: '試験結果は220 V' })[0].value === 'achieved_point');
+  }
+  {
+    // 新規追加した否定語(規格値/基準値/目標値/設計値)は、いずれもachieved_pointを
+    // unknown未満まで抑制することを確認する(実測値と混同されやすい非達成値の語)。
+    const negativeKeywordCases = ['規格値は220 V', '基準値は58 dB(A)', '目標値は12 kW', '設計値は220 V'];
+    for (const t of negativeKeywordCases) {
+      const r = extractQuantities(t).find(x => x.quantity.kind === 'interval');
+      const c = generateIntervalSemanticsCandidates(r, { side: 'B', nearbyText: t });
+      check(`否定語拡張: 「${t}」はachieved_pointが候補から排除される(unknownのみ残る)`,
+        c.length === 1 && c[0].value === 'unknown');
+    }
+  }
+  {
+    // 統計・代表値系の語(代表値/中央値/平均値)は、JIS統計用語上「複数の測定を要約した値」
+    // であり、単一の達成値と同一視できないため、意図的にどちらの辞書にも加えていない。
+    // 未分類のまま(構造的根拠のみ、確信度0.3)に留まることを確認する。
+    for (const t of ['代表値58 dB(A)', '中央値25 ℃', '平均値25 ℃']) {
+      const r = extractQuantities(t).find(x => x.quantity.kind === 'interval');
+      const c = generateIntervalSemanticsCandidates(r, { side: 'B', nearbyText: t });
+      check(`統計語は未分類のまま: 「${t}」はachieved_point:0.30(構造的根拠のみ)に留まる`,
+        c[0].value === 'achieved_point' && c[0].confidence === 0.3);
+    }
   }
 
   assertions.forEach(a => console.log((a.pass ? '[OK] ' : '[FAIL] ') + a.name));
