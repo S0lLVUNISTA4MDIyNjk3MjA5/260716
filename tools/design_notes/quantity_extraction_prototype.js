@@ -1,7 +1,8 @@
-// 工程4a（数量抽出）たたき台プロトタイプ v2
+// 工程4a（数量抽出）たたき台プロトタイプ v2.1
 // tools/design_notes/quantity_extraction_prototype_review.md の必須修正6項目
 // （符号付き数値／区間統合／境界包含区分／原文保持／暫定判定明示／条件誤伝播防止）
 // および、そのレビュー過程で追加発見した2件（±公差、桁区切りカンマ）を反映。
+// v2.1: 境界包含を考慮した被覆判定と、約・最大・最小等の修飾語保持を追加。
 // 依存ライブラリなし。 `node quantity_extraction_prototype.js` で単体実行できる。
 
 const UNIT_DEFS = [
@@ -172,18 +173,37 @@ function extractFromSentence(sentenceText, sentenceOffset, fullOriginal) {
       const [full, numStr, u] = m;
       const s = m.index, e = m.index + full.length;
       if (!isFree(s, e)) continue;
-      const after = norm.slice(e, e + 6);
-      const before = norm.slice(Math.max(0, s - 4), s);
+      const after = norm.slice(e, e + 8);
+      const beforeStart = Math.max(0, s - 8);
+      const before = norm.slice(beforeStart, s);
       let opWord = null;
       if (/^\s*以上/.test(after)) opWord = '以上';
       else if (/^\s*以下/.test(after)) opWord = '以下';
       else if (/^\s*未満/.test(after)) opWord = '未満';
       else if (/^\s*を?超え/.test(after)) opWord = '超える';
-      const approx = /約\s*$/.test(before);
+
+      // v2.1: 修飾語を数量表現の一部として保持する。
+      // 「最大・最小」は片側境界の候補、「約・およそ・程度・公称」は曖昧性情報として保持する。
+      const prefixMatch = before.match(/(約|およそ|最大|最小|公称)\s*$/);
+      const suffixMatch = after.match(/^\s*(程度)/);
+      const prefix = prefixMatch ? prefixMatch[1] : null;
+      const suffix = suffixMatch ? suffixMatch[1] : null;
+      const spanStart = prefixMatch ? s - prefixMatch[0].length : s;
+      const spanEnd = suffixMatch ? e + suffixMatch[0].length : e;
+      const qualifiers = [];
+      if (prefix === '約' || prefix === 'およそ' || suffix === '程度') {
+        qualifiers.push({ type: 'approximate', source_text: prefix || suffix });
+      }
+      if (prefix === '最大') qualifiers.push({ type: 'maximum', source_text: prefix });
+      if (prefix === '最小') qualifiers.push({ type: 'minimum', source_text: prefix });
+      if (prefix === '公称') qualifiers.push({ type: 'nominal', source_text: prefix });
+
       const value = parseNumber(numStr);
       const warnings = [];
       let quantity;
-      const bound = opWord ? boundFromOperatorWord(opWord) : null;
+      let bound = opWord ? boundFromOperatorWord(opWord) : null;
+      if (!bound && prefix === '最大') bound = { side: 'upper', inclusive: true };
+      if (!bound && prefix === '最小') bound = { side: 'lower', inclusive: true };
       if (bound) {
         // レビュー2.3: 境界の包含/非包含を保持する
         quantity = bound.side === 'lower'
@@ -192,9 +212,14 @@ function extractFromSentence(sentenceText, sentenceOffset, fullOriginal) {
       } else {
         quantity = makeIntervalExact(value); // レビュー4章: 単一値も区間モデルへ統一(lower=upper)
       }
-      if (approx) warnings.push('「約」表記のため、境界値は概数として扱う');
-      raws.push({ startLocal: s, endLocal: e, quantity, unit: unitInfo(u), warnings, _boundSide: bound ? bound.side : null });
-      markConsumed(s, e);
+      if (qualifiers.some(q => q.type === 'approximate')) warnings.push('概数表記のため、境界値は厳密値として扱わない');
+      if (prefix === '最大' || prefix === '最小') warnings.push(`「${prefix}」を片側境界候補として抽出。文脈による確定が必要`);
+      if (prefix === '公称') warnings.push('「公称」表記のため、実測値・保証値との混同に注意');
+      raws.push({
+        startLocal: spanStart, endLocal: spanEnd, quantity, unit: unitInfo(u), warnings,
+        qualifiers, _boundSide: opWord ? bound.side : null,
+      });
+      markConsumed(spanStart, spanEnd);
     }
   }
 
@@ -215,6 +240,7 @@ function extractFromSentence(sentenceText, sentenceOffset, fullOriginal) {
         quantity: { kind: 'interval', lower: cur.quantity.lower, upper: next.quantity.upper },
         unit: cur.unit,
         warnings: [...cur.warnings, ...next.warnings],
+        qualifiers: [...(cur.qualifiers || []), ...(next.qualifiers || [])],
       });
       i++; // next を消費済みにする
       continue;
@@ -247,6 +273,7 @@ function extractFromSentence(sentenceText, sentenceOffset, fullOriginal) {
         normalized_text: norm.slice(q.startLocal, q.endLocal),
         quantity: q.quantity,
         unit: q.unit,
+        ...(q.qualifiers && q.qualifiers.length ? { qualifiers: q.qualifiers } : {}),
         // property/subject/state は工程3(意味対応付け)が埋める領域であり、本プロトタイプ(工程4a)では確定しない
         context: { property: null, subject: null, state: null, tokens: contextTokens },
         extraction: { confidence: warnings.length ? 0.6 : 0.95, warnings },
@@ -283,15 +310,33 @@ function coverageGap(requirement, actual) {
   if (rq.kind !== 'interval' || ac.kind !== 'interval') {
     return { comparable: false, reason: '区間形式でない値は本デモでは比較しない' };
   }
-  const lowCovered = (ac.lower ? ac.lower.value : -Infinity) <= (rq.lower ? rq.lower.value : -Infinity);
-  const highCovered = (ac.upper ? ac.upper.value : Infinity) >= (rq.upper ? rq.upper.value : Infinity);
+  // v2.1: 境界値が等しい場合はinclusive/exclusiveも含めて被覆を判定する。
+  const lowerCovered = (() => {
+    if (!rq.lower) return !ac.lower;       // 要求が-∞までなら、実仕様も-∞まで必要
+    if (!ac.lower) return true;            // 実仕様が-∞までなら要求下限を被覆
+    if (ac.lower.value < rq.lower.value) return true;
+    if (ac.lower.value > rq.lower.value) return false;
+    return ac.lower.inclusive || !rq.lower.inclusive;
+  })();
+  const upperCovered = (() => {
+    if (!rq.upper) return !ac.upper;       // 要求が+∞までなら、実仕様も+∞まで必要
+    if (!ac.upper) return true;            // 実仕様が+∞までなら要求上限を被覆
+    if (ac.upper.value > rq.upper.value) return true;
+    if (ac.upper.value < rq.upper.value) return false;
+    return ac.upper.inclusive || !rq.upper.inclusive;
+  })();
+  const boundaryMismatch = {
+    lower: !!(rq.lower && ac.lower && rq.lower.value === ac.lower.value && rq.lower.inclusive && !ac.lower.inclusive),
+    upper: !!(rq.upper && ac.upper && rq.upper.value === ac.upper.value && rq.upper.inclusive && !ac.upper.inclusive),
+  };
   return {
     comparable: true,
     provisional: true, // 意味対応付け(工程3)による同一設計特性・同一条件の確認を経ていない暫定結果
     assumptions: ['同じ設計特性として選択済み', '同じ運転条件', '単位換算不要', '抽出結果に要確認事項なし'],
-    satisfied: lowCovered && highCovered,
-    lowGap: (rq.lower ? rq.lower.value : null) - (ac.lower ? ac.lower.value : null),
-    highGap: (rq.upper ? rq.upper.value : null) - (ac.upper ? ac.upper.value : null),
+    satisfied: lowerCovered && upperCovered,
+    lowGap: (rq.lower && ac.lower) ? ac.lower.value - rq.lower.value : null,
+    highGap: (rq.upper && ac.upper) ? rq.upper.value - ac.upper.value : null,
+    boundaryMismatch,
   };
 }
 
@@ -397,6 +442,36 @@ if (require.main === module) {
   }
   check('スラッシュ: selection_semanticsがunknown',
     extractQuantities('50/60 Hz')[0]?.quantity.selection_semantics === 'unknown');
+  {
+    const r = extractQuantities('約50℃')[0];
+    check('修飾語保持: 約50℃のsource_textに「約」を含む',
+      r?.source_text === '約50℃' && r?.qualifiers?.[0]?.type === 'approximate');
+  }
+  {
+    const r = extractQuantities('最大50℃')[0];
+    check('最大値候補: 最大50℃を上限50の片側区間として保持',
+      r?.source_text === '最大50℃' && r?.quantity.lower === null &&
+      r?.quantity.upper?.value === 50 && r?.qualifiers?.[0]?.type === 'maximum');
+  }
+  {
+    const r = extractQuantities('最小10kW')[0];
+    check('最小値候補: 最小10kWを下限10の片側区間として保持',
+      r?.source_text === '最小10kW' && r?.quantity.lower?.value === 10 &&
+      r?.quantity.upper === null && r?.qualifiers?.[0]?.type === 'minimum');
+  }
+  {
+    const reqClosed = extractQuantities('0℃以上50℃以下')[0];
+    const actualOpen = extractQuantities('0℃以上50℃未満')[0];
+    const g = coverageGap(reqClosed, actualOpen);
+    check('境界被覆: 要求上限を含み実仕様が含まない場合は未充足',
+      g.satisfied === false && g.boundaryMismatch.upper === true);
+  }
+  {
+    const reqOpen = extractQuantities('0℃以上50℃未満')[0];
+    const actualClosed = extractQuantities('0℃以上50℃以下')[0];
+    check('境界被覆: 実仕様が要求より広い包含境界なら充足',
+      coverageGap(reqOpen, actualClosed).satisfied === true);
+  }
   {
     const g = coverageGap(reqRange, stdRange);
     check('比較結果: provisional=trueが明示される', g.provisional === true && Array.isArray(g.assumptions));
