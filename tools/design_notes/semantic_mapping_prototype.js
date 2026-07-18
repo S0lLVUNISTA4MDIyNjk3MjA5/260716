@@ -64,11 +64,14 @@ const REQUIREMENT_SEMANTICS_RULES = [
 const ACTUAL_SEMANTICS_RULES = [
   { value: 'achieved_point', weight: 0.3, evidenceType: 'quantity_shape',
     match: (text, quantity) => isGenuinePoint(quantity) && !text.includes('±') },
-  // v2.10: レビュー指摘により0.3→0.15へ減衰。「B側(実仕様側)である」ことは役割を表すだけで、
-  // その点が達成値なのか設定値・公称値・試験条件・代表値なのかを識別する独立根拠にはならない。
-  // 「点である」根拠と合わせても、キーワード等の裏付けがない場合は自動適用の閾値に届かない
-  // 水準へ抑えた(8.4節のauto_applicable判定を参照)。
-  { value: 'achieved_point', weight: 0.15, evidenceType: 'source_role',
+  // v2.10で0.3→0.15へ減衰したが、再レビューで「否定語辞書にない未知の曖昧語(代表値/中央値/
+  // 計画値等)には依然として無条件に自動適用されてしまう」という指摘を受けた。「点である」
+  // (0.3)と合算するとmodeConfidence閾値(0.4)を超えてしまうため、v2.11でさらに0.05へ抑えた。
+  // 「B側(実仕様側)である」ことは役割を表すだけで、その点が達成値なのか設定値・公称値・
+  // 試験条件・代表値・中央値・計画値なのかを識別する独立根拠にはならない、という指摘を
+  // 額面どおり受け止め、未修飾の点は「形+役割」だけでは自動適用の閾値に届かない設計とした
+  // (無修飾の点は確信度0.35で候補には残るが、auto_applicableはfalseになる)。
+  { value: 'achieved_point', weight: 0.05, evidenceType: 'source_role',
     match: (text, quantity, record, ctx) => isGenuinePoint(quantity) && ctx.side === 'B' },
   { value: 'capability_domain', weight: 0.55, evidenceType: 'keyword',
     match: (text, quantity) => isTwoSidedRange(quantity) && /使用可能|対応可能|運転可能/.test(text) },
@@ -536,14 +539,21 @@ if (require.main === module) {
     tempResolvedResult.autoApplicable.applicable === true &&
     tempResolvedResult.comparison.satisfied === true && tempResolvedResult.comparison.highGap === 0);
 
-  // 冷房能力・電圧・騒音は、達成値(点)であることの構造的根拠と実仕様側であることの役割根拠
-  // だけで、明示的なキーワードがなくてもpoint_in_regionが自動導出されることを確認する
-  // (このパイプラインが温度以外の実データでも自動化を進められることの実演)。
+  // v2.11: 冷房能力・電圧・騒音は、達成値(点)であることの構造的根拠と実仕様側であることの
+  // 役割根拠「だけ」では、point_in_regionのcomparisonMode候補自体は導出されるものの、
+  // 確信度不足のため自動適用はされない(要確認のまま留まる)ことを確認する。
+  // v2.10まではこの「形+役割だけ」の組み合わせでも自動適用されていたが、外部レビューにより
+  // 「代表値」「中央値」「計画値」のような、否定語辞書にない曖昧な修飾語を伴う点も
+  // 区別なく自動適用されてしまうという指摘を受け、v2.11でachieved_pointのsource_role重みを
+  // さらに引き下げた(8.9節参照)。この結果、明示的な肯定根拠(達成値であることを示す
+  // 周辺語等)を伴わない裸の点は、候補としては残るが自動適用されないという、より保守的な
+  // 挙動になった。
   const coolingAuto = autoCompareGroup(groups.find(g => g.concept_id === 'performance.cooling_capacity'));
   const coolingResolvedResult = coolingAuto.comparisons.find(c => c.role === 'resolved_design');
-  check('冷房能力/検討結果: キーワードなしの達成値でもpoint_in_regionが自動導出・自動適用される',
+  check('冷房能力/検討結果: キーワードなしの達成値はpoint_in_region候補は導出されるが、確信度不足のため自動適用されない(要確認)',
     coolingResolvedResult?.modeCandidate?.value === 'point_in_region' &&
-    coolingResolvedResult.autoApplicable.applicable === true && coolingResolvedResult.comparison.satisfied === true);
+    coolingResolvedResult.autoApplicable.applicable === false &&
+    coolingResolvedResult.comparison.comparable === false);
 
   const coolingGroup = groups.find(g => g.concept_id === 'performance.cooling_capacity');
   check('冷房能力の概念グループも生成される', !!coolingGroup);
@@ -690,6 +700,30 @@ if (require.main === module) {
       const c = generateIntervalSemanticsCandidates(r, { side: 'B', nearbyText: t });
       check(`必須修正2: 「${t}」はachieved_pointが自動適用されない(unknownが最上位、またはachieved_pointとの差が閾値未満)`,
         c[0].value === 'unknown' || marginOf(c) < AUTO_APPLICABLE_THRESHOLDS.margin);
+    }
+  }
+
+  // ── v2.11: 再レビューによる必須修正2(再指摘)の回帰テスト ──
+  // 「否定語辞書にない未知の曖昧語(代表値/中央値/計画値等)は、依然としてachieved_pointが
+  // 自動適用されてしまう」という再指摘への対応。候補順位だけでなく、evaluateAutoApplicable()
+  // まで通して確認する(modeCandidate自体は導出されてよいが、auto_applicable:falseであること)。
+  {
+    const reqNoise = extractQuantities('騒音は60 dB(A)以下とすること')[0];
+    const reqTemp = extractQuantities('装置は0 ℃から50 ℃の環境で正常に運転できること。')[0];
+    const reqVoltage = extractQuantities('定格電源は220 Vとすること。')[0];
+    const unknownWordCases = [
+      { label: '代表値58dB(A)', reqRecord: reqNoise, reqText: '騒音は60 dB(A)以下とすること', actText: '代表値58 dB(A)' },
+      { label: '中央値25℃', reqRecord: reqTemp, reqText: '装置は0 ℃から50 ℃の環境で正常に運転できること。', actText: '中央値25 ℃' },
+      { label: '計画値220V', reqRecord: reqVoltage, reqText: '定格電源は220 Vとすること。', actText: '計画値220 V' },
+    ];
+    for (const { label, reqRecord, reqText, actText } of unknownWordCases) {
+      const actRecord = extractQuantities(actText)[0];
+      const reqC = generateIntervalSemanticsCandidates(reqRecord, { side: 'A', nearbyText: reqText });
+      const actC = generateIntervalSemanticsCandidates(actRecord, { side: 'B', nearbyText: actText });
+      const modeCandidate = deriveComparisonModeCandidate(reqC, actC);
+      const evalResult = evaluateAutoApplicable({ modeCandidate, requirementCandidates: reqC, actualCandidates: actC, propertyConfidence: 0.99, extractionWarningsCount: 0 });
+      check(`必須修正2(再指摘): 「${label}」はcomparisonMode候補が導出されてもauto_applicable:falseになる`,
+        evalResult.applicable === false);
     }
   }
 
