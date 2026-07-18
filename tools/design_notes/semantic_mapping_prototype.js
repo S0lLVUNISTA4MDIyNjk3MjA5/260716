@@ -724,6 +724,13 @@ if (require.main === module) {
       const evalResult = evaluateAutoApplicable({ modeCandidate, requirementCandidates: reqC, actualCandidates: actC, propertyConfidence: 0.99, extractionWarningsCount: 0 });
       check(`必須修正2(再指摘): 「${label}」はcomparisonMode候補が導出されてもauto_applicable:falseになる`,
         evalResult.applicable === false);
+      // v2.11再レビューでの軽微な改善提案: applicable:falseだけでなく、modeCandidateの中身
+      // (point_in_region・確信度0.35)まで固定しておくと、将来の回帰原因を判別しやすくなる
+      // (要求がacceptable_regionの場合。中央値25℃はrequired_capability_domain側のため対象外)。
+      if (reqRecord === reqNoise || reqRecord === reqVoltage) {
+        check(`必須修正2(再指摘・固定値確認): 「${label}」のmodeCandidateはpoint_in_region・確信度0.35のまま導出される`,
+          modeCandidate?.value === 'point_in_region' && modeCandidate?.confidence === 0.35);
+      }
     }
   }
 
