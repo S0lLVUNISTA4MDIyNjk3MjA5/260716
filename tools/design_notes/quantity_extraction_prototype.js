@@ -1,4 +1,4 @@
-// 工程4a（数量抽出）たたき台プロトタイプ v2.6
+// 工程4a（数量抽出）たたき台プロトタイプ v2.7
 // tools/design_notes/quantity_extraction_prototype_review.md の必須修正6項目
 // （符号付き数値／区間統合／境界包含区分／原文保持／暫定判定明示／条件誤伝播防止）
 // および、そのレビュー過程で追加発見した2件（±公差、桁区切りカンマ）を反映。
@@ -22,6 +22,15 @@
 //       'range_covers_range'から改名）。あわせて、単位不一致等の早期returnで
 //       extractionWarningsが失われていた不具合も修正（警告収集を関数冒頭へ移動）。
 //       詳細はquantity_extraction_prototype_review.md 0.5節を参照。
+// v2.7: 外部レビューにより、coversLower()/coversUpper()が無限境界(下限/上限なし)を誤って
+//       扱う不具合が指摘され修正。「要求12kW以上×実仕様0〜20kW」のように、要求が無限に
+//       広がる(上限なし)のに実仕様が有限区間の場合、実仕様は要求を覆えないはずが、旧実装は
+//       inner側の境界がnullなら無条件でtrueを返していたため誤ってsatisfied:trueになっていた。
+//       修正により、outer側もnullである場合に限り「無限境界を覆う」と判定するようにした。
+//       あわせて、coversLower/coversUpperが無限境界を正しく扱えるようになったことで片側区間と
+//       両側区間を区別する必要がなくなったため、comparisonMode指定時は実仕様が片側区間でも
+//       比較できるよう統合した（modeが指定されない場合は従来どおり比較不能を返す）。
+//       詳細はquantity_extraction_prototype_review.md 0.6節を参照。
 // 依存ライブラリなし。 `node quantity_extraction_prototype.js` で単体実行できる。
 
 const UNIT_DEFS = [
@@ -346,14 +355,19 @@ function isGenuinePoint(q) {
 // actual_covers_requirement(outer=actual, inner=requirement)にも
 // requirement_covers_actual(outer=requirement, inner=actual)にも同じ形で使う。
 function coversLower(outer, inner) {
-  if (!inner.lower) return true;
+  // inner.lowerがnull(下限なし=負の無限大まで広がる)場合、outerがそれを覆うには
+  // outer.lowerもnullでなければならない(外部レビュー指摘。v2.6は無条件でtrueを返しており、
+  // 要求[12,+∞)を実仕様[0,20]が誤って充足していると判定していた)。
+  if (!inner.lower) return !outer.lower;
   if (!outer.lower) return true;
   if (outer.lower.value < inner.lower.value) return true;
   if (outer.lower.value > inner.lower.value) return false;
   return outer.lower.inclusive || !inner.lower.inclusive;
 }
 function coversUpper(outer, inner) {
-  if (!inner.upper) return true;
+  // 上限側も同様。inner.upperがnull(上限なし=正の無限大まで広がる)場合、
+  // outerがそれを覆うにはouter.upperもnullでなければならない。
+  if (!inner.upper) return !outer.upper;
   if (!outer.upper) return true;
   if (outer.upper.value > inner.upper.value) return true;
   if (outer.upper.value < inner.upper.value) return false;
@@ -408,53 +422,46 @@ function coverageGap(requirement, actual, options = {}) {
     };
   }
 
-  // v2.6: actualが両側区間の場合も、その区間が何を意味するかは構造だけからは一意に決まらない
-  // (外部レビュー指摘。v2.5では片側区間だけをこの扱いにしていたが、両側区間にも同じ問題が
-  // あるという指摘を受けて拡張した)。少なくとも次の2通りの意味があり、比較方向が逆になる。
-  //   - actual_covers_requirement: actualが対応可能領域(温度0~50℃等)を表す場合。
+  // v2.7: actualが点でない場合(片側区間・両側区間のいずれも)、その区間が何を意味するかは
+  // 構造だけからは一意に決まらない(外部レビュー指摘。v2.5は片側区間だけ、v2.6は両側区間にも
+  // 拡張してこの扱いにしていたが、coversLower/coversUpperが無限境界(lower/upper===null)を
+  // 正しく扱えるようになったv2.7では、片側・両側を区別する必要自体がなくなった)。
+  // 少なくとも次の2通りの意味があり、比較方向が逆になる。
+  //   - actual_covers_requirement: actualが対応可能領域(温度0~50℃等)や保証範囲を表す場合。
   //     実仕様の範囲が要求範囲を覆っているか(actual ⊇ requirement)を判定する。
-  //   - requirement_covers_actual: actualが変動・公差範囲(220±10V等)や測定結果のばらつきを
-  //     表す場合。実仕様の範囲全体が要求の許容範囲に収まっているか(requirement ⊇ actual)を判定する。
+  //   - requirement_covers_actual: actualが変動・公差範囲(220±10V等)や測定結果のばらつき、
+  //     保証下限・保証上限(Xkg以上/Xkg以下)を表す場合。実仕様の範囲全体が要求の許容範囲に
+  //     収まっているか(requirement ⊇ actual)を判定する。
   //     例: 要求200~240V×実仕様220±10V(実質210~230V)は、変動範囲としてなら充足のはずだが、
   //     v2.5までは常にactual_covers_requirement方向(actual ⊇ requirement)で判定していたため、
   //     actualが要求範囲全体を覆っていないという理由で誤って未充足と判定していた。
   // どちらの意味かは工程3(意味対応付け)が候補として持つべき情報であり、工程4a単体では
   // 判定できない。comparisonModeが明示されない限り、自動で方向を決めず比較不能を返す。
-  if (ac.lower && ac.upper) {
-    const mode = options.comparisonMode;
-    if (mode !== 'actual_covers_requirement' && mode !== 'requirement_covers_actual') {
-      return {
-        comparable: false,
-        reason: '区間の意味(対応可能領域か、変動・公差範囲か等)が未確定のため、comparisonModeの指定なしに比較方向を確定できません',
-        extractionWarnings,
-      };
-    }
-    const outer = mode === 'actual_covers_requirement' ? ac : rq;
-    const inner = mode === 'actual_covers_requirement' ? rq : ac;
-    const lowerCovered = coversLower(outer, inner);
-    const upperCovered = coversUpper(outer, inner);
-    const boundaryMismatch = {
-      lower: !!(inner.lower && outer.lower && inner.lower.value === outer.lower.value && inner.lower.inclusive && !outer.lower.inclusive),
-      upper: !!(inner.upper && outer.upper && inner.upper.value === outer.upper.value && inner.upper.inclusive && !outer.upper.inclusive),
-    };
+  const mode = options.comparisonMode;
+  if (mode !== 'actual_covers_requirement' && mode !== 'requirement_covers_actual') {
     return {
-      comparable: true,
-      provisional: true,
-      comparison_mode: mode,
-      assumptions: ['同じ設計特性として選択済み', '同じ運転条件', '単位換算不要'],
-      satisfied: lowerCovered && upperCovered,
-      lowGap: (rq.lower && ac.lower) ? ac.lower.value - rq.lower.value : null,
-      highGap: (rq.upper && ac.upper) ? rq.upper.value - ac.upper.value : null,
-      boundaryMismatch,
+      comparable: false,
+      reason: '区間の意味(対応可能領域か、変動・公差範囲か、保証下限/保証上限か等)が未確定のため、comparisonModeの指定なしに比較方向を確定できません',
       extractionWarnings,
     };
   }
-
-  // actualが片側区間(lower・upperの片方のみ): 「保証下限(Xkg以上)」「保証上限(Xkg以下)」の
-  // どちらを意味するかを、実仕様の構造だけからは一意に決定できない(v2.5で対応)。
+  const outer = mode === 'actual_covers_requirement' ? ac : rq;
+  const inner = mode === 'actual_covers_requirement' ? rq : ac;
+  const lowerCovered = coversLower(outer, inner);
+  const upperCovered = coversUpper(outer, inner);
+  const boundaryMismatch = {
+    lower: !!(inner.lower && outer.lower && inner.lower.value === outer.lower.value && inner.lower.inclusive && !outer.lower.inclusive),
+    upper: !!(inner.upper && outer.upper && inner.upper.value === outer.upper.value && inner.upper.inclusive && !outer.upper.inclusive),
+  };
   return {
-    comparable: false,
-    reason: '区間の意味が未確定です(実仕様が片側区間のため、能力領域・保証下限・保証上限のいずれを表すか構造だけからは判定できません)',
+    comparable: true,
+    provisional: true,
+    comparison_mode: mode,
+    assumptions: ['同じ設計特性として選択済み', '同じ運転条件', '単位換算不要'],
+    satisfied: lowerCovered && upperCovered,
+    lowGap: (rq.lower && ac.lower) ? ac.lower.value - rq.lower.value : null,
+    highGap: (rq.upper && ac.upper) ? rq.upper.value - ac.upper.value : null,
+    boundaryMismatch,
     extractionWarnings,
   };
 }
@@ -719,6 +726,35 @@ if (require.main === module) {
     check('警告伝播: 単位不一致でcomparable:falseでもextractionWarningsは保持される',
       g.comparable === false && g.reason === '単位不一致' &&
       g.extractionWarnings.some(w => w.side === 'actual' && w.warning.includes('最大')));
+  }
+  {
+    // v2.7: 外部レビュー指摘の回帰テスト。無限境界(下限/上限なし)の包含判定が逆だった不具合。
+    // 要求[12,+∞)(12kW以上)は「20kWを超える領域」も要求しているのに、実仕様[0,20]は
+    // そこまで対応していない。旧実装はinner(要求)側の上限がnullなら無条件でtrueを返しており、
+    // 実仕様が要求の無限に広がる部分を覆えていないことを見逃し、誤ってsatisfied:trueにしていた。
+    const req1 = extractQuantities('冷房能力12 kW以上を確保すること')[0]; // [12, +∞)
+    const act1 = extractQuantities('冷房能力は0 kWから20 kWまで')[0]; // [0, 20]
+    const g1 = coverageGap(req1, act1, { comparisonMode: 'actual_covers_requirement' });
+    check('無限境界: 要求[12,+∞)を実仕様[0,20]は覆えないため未充足',
+      g1.satisfied === false);
+
+    const req2 = extractQuantities('冷房能力は60 kW以下とすること')[0]; // (-∞, 60]
+    const act2 = extractQuantities('冷房能力は0 kWから100 kWまで')[0]; // [0, 100]
+    const g2 = coverageGap(req2, act2, { comparisonMode: 'actual_covers_requirement' });
+    check('無限境界: 要求(-∞,60]を実仕様[0,100]は覆えないため未充足',
+      g2.satisfied === false);
+
+    const req3 = extractQuantities('冷房能力12 kW以上を確保すること')[0]; // [12, +∞)
+    const act3 = extractQuantities('冷房能力は12 kW以上を実現')[0]; // [12, +∞)
+    const g3 = coverageGap(req3, act3, { comparisonMode: 'actual_covers_requirement' });
+    check('無限境界: 要求[12,+∞)を同じ[12,+∞)の実仕様なら充足(片側区間でもmode指定で比較できる)',
+      g3.satisfied === true);
+
+    const req4 = extractQuantities('冷房能力は60 kW以下とすること')[0]; // (-∞, 60]
+    const act4 = extractQuantities('冷房能力は58 kW以下で運転')[0]; // (-∞, 58]
+    const g4 = coverageGap(req4, act4, { comparisonMode: 'requirement_covers_actual' });
+    check('無限境界: 要求(-∞,60]は実仕様(-∞,58]をrequirement_covers_actualで充足と判定する',
+      g4.satisfied === true);
   }
 
   assertions.forEach(a => console.log((a.pass ? '[OK] ' : '[FAIL] ') + a.name));
