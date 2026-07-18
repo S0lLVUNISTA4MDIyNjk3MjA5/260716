@@ -486,6 +486,18 @@ function buildPropertyCandidateRecords(text, ctx) {
   // v2.15(再レビュー必須修正1): 同じsource_textの数量がセル内に複数回出現する場合、それぞれが
   // 何番目の出現かを事前に数えておく(nearbyText.indexOf()が常に最初の出現に解決してしまう
   // 不具合への対応。localClauseText()へoccurrenceIndexとして渡す)。
+  //
+  // 【設計上の制約(レビューで指摘・文書化のみで承認)】この方式は、
+  // extractQuantities()(quantity_extraction_prototype.js)の出力順序が原文中の出現順序と
+  // 一致していることに依存する。現在の実装はextractFromSentence()内で
+  // `raws.sort((a, b) => a.startLocal - b.startLocal)`により文内の出現順を保証しており、
+  // 文をまたぐ場合もsplitSentences()の分割順に処理されるため、本プロトタイプの範囲では
+  // 出現順序どおりに出力される。ただし、これは`quantities`配列がその順序で並ぶという
+  // 暗黙の前提であり、明示的なデータ契約ではない。工程4a側で抽出結果の並べ替えや区間統合
+  // 方法を変更すると、この前提が崩れoccurrenceIndexが誤って対応する可能性がある。本体統合を
+  // 検討する際は、occurrenceIndexという間接的な位置特定ではなく、工程4aの出力へ
+  // source_span(原文内の開始・終了オフセット)を正式なデータ契約として追加し、
+  // localClauseText()がそれを直接使う設計へ移行することが望ましい。
   const occurrenceCounts = new Map();
   quantities.forEach((q, idx) => {
     const occurrenceIndex = occurrenceCounts.get(q.source_text) || 0;
