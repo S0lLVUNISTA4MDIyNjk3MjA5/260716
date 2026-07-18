@@ -29,11 +29,18 @@
 //   (2) 「B側(実仕様側)の点である」ことだけでachieved_pointがほぼ自動確定(確信度0.6)していた
 //       問題。設定値・公称値・試験条件・参考値との区別がつかないため、役割根拠の重みを削減し、
 //       「設定」「公称」「試験」を否定根拠の語彙へ追加した。
-// 詳細は8.8節を参照。
+// v2.10の対応は否定語辞書に列挙した語だけを止める対症療法だったため、再レビューで「未知の
+// 曖昧語(代表値/中央値/計画値等)には依然として自動適用される」と再指摘され、v2.11で
+// source_role重みを0.05まで下げた(無修飾の点は形+役割だけでは閾値に届かない設計へ)。
+// v2.12(8.10節)では、レビュー推奨に沿い「列の役割＋セル内の肯定語＋数量形状」を独立根拠として
+// 積み上げる設計へ拡張した。列の役割(出典列が'検討結果'かどうか)は弱い根拠(0.05)に留め、
+// セル内に達成値であることを積極的に示す語(実測/達成値/検討の結果等)がある場合のみ、閾値を
+// 超えられる強い根拠(0.4)を与える。構造的根拠(形・列名)だけでは決して閾値を超えない設計は
+// 維持している。詳細は8.8〜8.10節を参照。
 
 const { extractQuantities, coverageGap, isGenuinePoint, isEmptyInterval } = require('./quantity_extraction_prototype.js');
 
-// ── interval_semantics 候補生成(v2.9で着手、v2.10で必須修正2件を反映) ──
+// ── interval_semantics 候補生成(v2.9で着手、v2.10〜v2.12で必須修正・拡張を反映) ──
 // 区間の「形」(点/片側/両側)だけでは、その区間が何を意味するかを一意に決定できない
 // (quantity_extraction_prototype_review.md 0.4〜0.7節のレビュー指摘、および今回のレビューで
 // 明示的に依頼された設計条件)。役割(要求/実仕様)・周辺語・数量の形・修飾語・否定語を
@@ -71,8 +78,22 @@ const ACTUAL_SEMANTICS_RULES = [
   // 試験条件・代表値・中央値・計画値なのかを識別する独立根拠にはならない、という指摘を
   // 額面どおり受け止め、未修飾の点は「形+役割」だけでは自動適用の閾値に届かない設計とした
   // (無修飾の点は確信度0.35で候補には残るが、auto_applicableはfalseになる)。
-  { value: 'achieved_point', weight: 0.05, evidenceType: 'source_role',
-    match: (text, quantity, record, ctx) => isGenuinePoint(quantity) && ctx.side === 'B' },
+  //
+  // v2.12(8.10節): レビュー推奨「列の役割＋セル内の肯定語＋数量形状を独立根拠として積み上げる」
+  // に沿って再設計した。単に「B側である」という一律の役割根拠ではなく、出典列の名前そのもの
+  // （'検討結果'＝検討の結果値、'標準機種情報'＝規格・公称値の可能性も残る）を弱い根拠として
+  // 使う。ただし、この列根拠の重みは意図的に低く抑えている(0.05)。「点である(0.3)」と
+  // 合算しても0.35にしかならず、モード確信度閾値(0.4)には届かない。これは、列名という
+  // 構造的な手掛かりだけでは「代表値」「中央値」等の未知の曖昧語と同じ強さの根拠にしかならず、
+  // 列根拠を強めるとv2.11で塞いだはずの脆弱性（否定語辞書にない曖昧語＋位置的な手掛かりだけで
+  // 自動適用してしまう）を再び開けてしまうことを確認したため（8.10節参照）。
+  { value: 'achieved_point', weight: 0.05, evidenceType: 'column_role',
+    match: (text, quantity, record, ctx) => isGenuinePoint(quantity) && ctx.sourceColumn === '検討結果' },
+  // セル内に達成値であることを積極的に示す語がある場合のみ、自動適用の閾値を超えられる
+  // 強い根拠を与える。「点である」構造的根拠と組み合わせて初めて高確信度に達する設計とし、
+  // 構造的根拠(形・列名)だけでは決して閾値を超えないようにしている。
+  { value: 'achieved_point', weight: 0.4, evidenceType: 'keyword',
+    match: (text, quantity) => isGenuinePoint(quantity) && /実測|達成値|検討の結果|測定した結果/.test(text) },
   { value: 'capability_domain', weight: 0.55, evidenceType: 'keyword',
     match: (text, quantity) => isTwoSidedRange(quantity) && /使用可能|対応可能|運転可能/.test(text) },
   { value: 'capability_domain', weight: 0.1, evidenceType: 'quantity_shape',
@@ -719,19 +740,52 @@ if (require.main === module) {
     for (const { label, reqRecord, reqText, actText } of unknownWordCases) {
       const actRecord = extractQuantities(actText)[0];
       const reqC = generateIntervalSemanticsCandidates(reqRecord, { side: 'A', nearbyText: reqText });
-      const actC = generateIntervalSemanticsCandidates(actRecord, { side: 'B', nearbyText: actText });
+      // v2.12(8.10節)の回帰確認: 「検討結果」列に置かれた場合でも(列根拠+形の合算は0.35に
+      // 留まるよう設計しているため)、これらの未知の曖昧語は依然として自動適用されないことを
+      // 確認する。sourceColumnを明示することで、列の役割根拠込みでも安全であることを検証する。
+      const actC = generateIntervalSemanticsCandidates(actRecord, { side: 'B', sourceColumn: '検討結果', nearbyText: actText });
       const modeCandidate = deriveComparisonModeCandidate(reqC, actC);
       const evalResult = evaluateAutoApplicable({ modeCandidate, requirementCandidates: reqC, actualCandidates: actC, propertyConfidence: 0.99, extractionWarningsCount: 0 });
-      check(`必須修正2(再指摘): 「${label}」はcomparisonMode候補が導出されてもauto_applicable:falseになる`,
+      check(`必須修正2(再指摘): 「${label}」は検討結果列に置かれてもcomparisonMode候補が導出されつつauto_applicable:falseになる`,
         evalResult.applicable === false);
       // v2.11再レビューでの軽微な改善提案: applicable:falseだけでなく、modeCandidateの中身
-      // (point_in_region・確信度0.35)まで固定しておくと、将来の回帰原因を判別しやすくなる
-      // (要求がacceptable_regionの場合。中央値25℃はrequired_capability_domain側のため対象外)。
+      // (point_in_region・確信度0.35＝形0.3+列根拠0.05)まで固定しておくと、将来の回帰原因を
+      // 判別しやすくなる（要求がacceptable_regionの場合。中央値25℃はrequired_capability_domain
+      // 側のため対象外）。
       if (reqRecord === reqNoise || reqRecord === reqVoltage) {
-        check(`必須修正2(再指摘・固定値確認): 「${label}」のmodeCandidateはpoint_in_region・確信度0.35のまま導出される`,
+        check(`必須修正2(再指摘・固定値確認): 「${label}」のmodeCandidateはpoint_in_region・確信度0.35(検討結果列根拠込み)のまま導出される`,
           modeCandidate?.value === 'point_in_region' && modeCandidate?.confidence === 0.35);
       }
     }
+  }
+
+  // ── v2.12(8.10節): 肯定的根拠(列の役割＋セル内の肯定語＋数量形状)の回帰テスト ──
+  {
+    // セル内に達成値であることを積極的に示す語がある場合は、列を問わず高確信度で
+    // achieved_pointが自動適用されることを確認する(「肯定的根拠」の独立性)。
+    const reqCooling = extractQuantities('冷房能力12 kW以上を確保すること。')[0];
+    const actMeasured = extractQuantities('標準機種情報として実測10 kW')[0];
+    const reqC1 = generateIntervalSemanticsCandidates(reqCooling, { side: 'A', nearbyText: '冷房能力12 kW以上を確保すること。' });
+    const actC1 = generateIntervalSemanticsCandidates(actMeasured, { side: 'B', sourceColumn: '標準機種情報', nearbyText: '標準機種情報として実測10 kW' });
+    check('肯定的根拠: 「実測10kW」は標準機種情報列でもachieved_pointが高確信度で候補になる(セル内の肯定語が列に関係なく機能する)',
+      actC1[0].value === 'achieved_point' && actC1[0].confidence >= 0.7);
+    const modeCandidate1 = deriveComparisonModeCandidate(reqC1, actC1);
+    const evalResult1 = evaluateAutoApplicable({ modeCandidate: modeCandidate1, requirementCandidates: reqC1, actualCandidates: actC1, propertyConfidence: 0.99, extractionWarningsCount: 0 });
+    check('肯定的根拠: 「実測10kW」はauto_applicable:trueになる(肯定語による裏付けがある場合は自動適用してよい)',
+      evalResult1.applicable === true);
+  }
+  {
+    // 列の役割(出典列が'検討結果'かどうか)は弱い根拠(0.05)として機能し、無修飾の点の確信度に
+    // 差をつける(0.30→0.35)。ただし、この差だけでは自動適用の閾値には届かない
+    // (「列名という構造的な手掛かりだけでは足りない」という設計意図の確認)。
+    const actNoKeywordBaseline = extractQuantities('10 kW')[0];
+    const cBaseline = generateIntervalSemanticsCandidates(actNoKeywordBaseline, { side: 'B', sourceColumn: '標準機種情報', nearbyText: '10 kW' });
+    const cResolved = generateIntervalSemanticsCandidates(actNoKeywordBaseline, { side: 'B', sourceColumn: '検討結果', nearbyText: '10 kW' });
+    check('列の役割: 同じ無修飾の点でも、検討結果列の方が標準機種情報列よりわずかに確信度が高い(0.35 > 0.30)',
+      cResolved[0].value === 'achieved_point' && cBaseline[0].value === 'achieved_point' &&
+      cResolved[0].confidence === 0.35 && cBaseline[0].confidence === 0.3);
+    check('列の役割: 検討結果列という列名だけの根拠(形+列)では、自動適用の閾値(0.4)には届かない',
+      cResolved[0].confidence < 0.4);
   }
 
   assertions.forEach(a => console.log((a.pass ? '[OK] ' : '[FAIL] ') + a.name));
