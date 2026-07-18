@@ -1,4 +1,4 @@
-// 工程4a（数量抽出）たたき台プロトタイプ v2.8
+// 工程4a（数量抽出）たたき台プロトタイプ v2.9
 // tools/design_notes/quantity_extraction_prototype_review.md の必須修正6項目
 // （符号付き数値／区間統合／境界包含区分／原文保持／暫定判定明示／条件誤伝播防止）
 // および、そのレビュー過程で追加発見した2件（±公差、桁区切りカンマ）を反映。
@@ -39,6 +39,11 @@
 //       扱われていた）。mode未指定かつ点の場合は従来どおりpoint_in_regionを既定動作として
 //       維持しつつ、mode明示時はそれに従うよう修正した。詳細はquantity_extraction_prototype_review.md
 //       0.7節を参照。
+// v2.9: 「最高・最低」を「最大・最小」の同義語として認識するよう追加(工程3の
+//       interval_semantics候補生成の対照テスト作成中に、「最低」が全く認識されず単なる
+//       数値として抽出される不具合を発見)。あわせて、isGenuinePoint/isEmptyIntervalを
+//       exportし、工程3プロトタイプがcoverageGap()と同じ「点」「空区間」の定義を再利用
+//       できるようにした。
 // 依存ライブラリなし。 `node quantity_extraction_prototype.js` で単体実行できる。
 
 const UNIT_DEFS = [
@@ -223,26 +228,32 @@ function extractFromSentence(sentenceText, sentenceOffset, fullOriginal) {
 
       // v2.1: 修飾語を数量表現の一部として保持する。
       // 「最大・最小」は片側境界の候補、「約・およそ・程度・公称」は曖昧性情報として保持する。
-      const prefixMatch = before.match(/(約|およそ|最大|最小|公称)\s*$/);
+      // v2.9: 「最高・最低」を「最大・最小」の同義語として認識する(工程3のinterval_semantics
+      // 候補生成の対照テスト作成中に、「最低」が全く認識されず単なる数値として抽出されて
+      // しまう不具合を発見。実文書では最大/最小と同程度に一般的な表現のため追加した)。
+      // source_textには実際に書かれた語(最高/最低)をそのまま保持し、種別(type)のみ
+      // 最大/最小と同じ'maximum'/'minimum'へ正規化する。
+      const prefixMatch = before.match(/(約|およそ|最大|最小|最高|最低|公称)\s*$/);
       const suffixMatch = after.match(/^\s*(程度)/);
       const prefix = prefixMatch ? prefixMatch[1] : null;
       const suffix = suffixMatch ? suffixMatch[1] : null;
+      const prefixCanonical = prefix === '最高' ? '最大' : prefix === '最低' ? '最小' : prefix;
       const spanStart = prefixMatch ? s - prefixMatch[0].length : s;
       const spanEnd = suffixMatch ? e + suffixMatch[0].length : e;
       const qualifiers = [];
       if (prefix === '約' || prefix === 'およそ' || suffix === '程度') {
         qualifiers.push({ type: 'approximate', source_text: prefix || suffix });
       }
-      if (prefix === '最大') qualifiers.push({ type: 'maximum', source_text: prefix });
-      if (prefix === '最小') qualifiers.push({ type: 'minimum', source_text: prefix });
+      if (prefixCanonical === '最大') qualifiers.push({ type: 'maximum', source_text: prefix });
+      if (prefixCanonical === '最小') qualifiers.push({ type: 'minimum', source_text: prefix });
       if (prefix === '公称') qualifiers.push({ type: 'nominal', source_text: prefix });
 
       const value = parseNumber(numStr);
       const warnings = [];
       let quantity;
       let bound = opWord ? boundFromOperatorWord(opWord) : null;
-      if (!bound && prefix === '最大') bound = { side: 'upper', inclusive: true };
-      if (!bound && prefix === '最小') bound = { side: 'lower', inclusive: true };
+      if (!bound && prefixCanonical === '最大') bound = { side: 'upper', inclusive: true };
+      if (!bound && prefixCanonical === '最小') bound = { side: 'lower', inclusive: true };
       if (bound) {
         // レビュー2.3: 境界の包含/非包含を保持する
         quantity = bound.side === 'lower'
@@ -252,7 +263,7 @@ function extractFromSentence(sentenceText, sentenceOffset, fullOriginal) {
         quantity = makeIntervalExact(value); // レビュー4章: 単一値も区間モデルへ統一(lower=upper)
       }
       if (qualifiers.some(q => q.type === 'approximate')) warnings.push('概数表記のため、境界値は厳密値として扱わない');
-      if (prefix === '最大' || prefix === '最小') warnings.push(`「${prefix}」を片側境界候補として抽出。文脈による確定が必要`);
+      if (prefixCanonical === '最大' || prefixCanonical === '最小') warnings.push(`「${prefix}」を片側境界候補として抽出。文脈による確定が必要`);
       if (prefix === '公称') warnings.push('「公称」表記のため、実測値・保証値との混同に注意');
       raws.push({
         // v2.2: 最大/最小由来の境界も_boundSideへ反映し、以上/以下と同様に隣接統合の対象にする
@@ -502,7 +513,7 @@ function coverageGap(requirement, actual, options = {}) {
   };
 }
 
-module.exports = { extractQuantities, coverageGap, unitInfo, normalizeText1to1 };
+module.exports = { extractQuantities, coverageGap, unitInfo, normalizeText1to1, isGenuinePoint, isEmptyInterval };
 
 // ── 単体実行時のデモ・テスト出力 ──
 if (require.main === module) {
@@ -633,6 +644,21 @@ if (require.main === module) {
     check('最小値候補: 最小10kWを下限10の片側区間として保持',
       r?.source_text === '最小10kW' && r?.quantity.lower?.value === 10 &&
       r?.quantity.upper === null && r?.qualifiers?.[0]?.type === 'minimum');
+  }
+  {
+    // v2.9: 「最高・最低」を「最大・最小」の同義語として認識する回帰テスト。
+    // 工程3のinterval_semantics対照テスト作成中に、「最低」が全く認識されず
+    // 単なる点(15kW)として抽出されてしまう不具合を発見した。
+    const rMax = extractQuantities('最高58dB(A)')[0];
+    check('最高値候補: 最高58dB(A)を上限58の片側区間として保持(最大の同義語)',
+      rMax?.source_text === '最高58dB(A)' && rMax?.quantity.lower === null &&
+      rMax?.quantity.upper?.value === 58 && rMax?.qualifiers?.[0]?.type === 'maximum' &&
+      rMax?.qualifiers?.[0]?.source_text === '最高');
+    const rMin = extractQuantities('最低15kW')[0];
+    check('最低値候補: 最低15kWを下限15の片側区間として保持(最小の同義語)',
+      rMin?.source_text === '最低15kW' && rMin?.quantity.lower?.value === 15 &&
+      rMin?.quantity.upper === null && rMin?.qualifiers?.[0]?.type === 'minimum' &&
+      rMin?.qualifiers?.[0]?.source_text === '最低');
   }
   {
     // v2.2: 最大/最小由来の隣接した片側境界も、以上/以下と同様に1つの区間へ統合する

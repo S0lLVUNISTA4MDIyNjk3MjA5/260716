@@ -2,8 +2,9 @@
 
 **位置づけ:** 将来の自動化方針に関する検討メモ。**未実装・未決定**（本ツール群のHTMLには未統合）。他AI・他メンバーによるレビューを想定した論点整理。
 **作成日:** 2026-07-18
-**関連文書:** `tools/design_notes/abstraction_levels.md`（6工程モデル）、`tools/design_notes/quantity_extraction_prototype.md`（工程4a。本文書はその続きとして工程3を扱う）、`tools/design_notes/quantity_extraction_prototype_review.md`（0.3節で工程3への着手を提案）
-**付属ファイル:** `tools/design_notes/semantic_mapping_prototype.js`（Node.js、依存ライブラリなし。工程4aを`require`する。`node semantic_mapping_prototype.js`で実行可能）
+**版:** 2（1〜7章：概念候補・役割候補・比較方向の設計判断。8章：`interval_semantics`候補生成をv2.9で追加）
+**関連文書:** `tools/design_notes/abstraction_levels.md`（6工程モデル）、`tools/design_notes/quantity_extraction_prototype.md`（工程4a。本文書はその続きとして工程3を扱う）、`tools/design_notes/quantity_extraction_prototype_review.md`（0.3節で工程3への着手を提案、0.7節で`interval_semantics`候補生成への着手と設計条件を提示）
+**付属ファイル:** `tools/design_notes/semantic_mapping_prototype.js`（Node.js、依存ライブラリなし。工程4aを`require`する。`node semantic_mapping_prototype.js`で実行可能。完了条件アサーション28件を出力する）
 
 ---
 
@@ -151,9 +152,9 @@ v2.5は両側区間を無条件で「対応可能領域」（`actual ⊇ require
 
 **付記（v2.7〜v2.8）**：`comparisonMode`実装自体にも、無限境界（下限・上限なし）の包含判定が逆という不具合（v2.7で修正）、および`actual`が真の点でも`comparisonMode`の指定が無視されるという不具合（v2.8で修正）が別途指摘・修正された（`quantity_extraction_prototype.md`5.10〜5.11節、`quantity_extraction_prototype_review.md`0.6〜0.7節参照）。この時点で比較エンジン（`coverageGap()`）側の基盤は一旦完成と評価された。本プロトタイプが使う温度・冷房能力等の比較はいずれも有限境界で、かつmode明示は使っていないため、これらの修正による本プロトタイプの出力・アサーションへの影響はない（10件中10件成功のまま）。
 
-## 6. 完了条件チェック
+## 6. 完了条件チェック（4〜5章：概念候補・比較方向の設計判断部分）
 
-`node semantic_mapping_prototype.js`で次を確認できる（10件中10件成功）。
+`node semantic_mapping_prototype.js`で次を確認できる（8章の`interval_semantics`関連を含め、全体で28件中28件成功。この節は4〜5章に対応する10件）。
 
 - [x] 温度概念グループが生成される
 - [x] 温度概念グループにrequirement/baseline_design/resolved_designが揃う
@@ -166,12 +167,147 @@ v2.5は両側区間を無条件で「対応可能領域」（`actual ⊇ require
 - [x] 【v2.4で修正済み】999kWは12kW以上の要求を満たす（`point_in_region`モードで正しく充足と判定される。4.2節・5章参照）
 - [x] 【v2.6で追加確認】両側区間（温度）はcomparisonMode未指定では自動橋渡しループも比較不能を返す（5.2節、`quantity_extraction_prototype.md`5.9節参照）
 
-## 7. 次の検討候補
+## 7. 次の検討候補（4〜5章の範囲に閉じた残課題）
 
-5章の比較方向の設計判断は、v2.4での修正提案が外部レビューにより不十分と指摘され、v2.5で安全策（片側区間は自動判定しない）に見直され（5.1節）、さらにv2.6で両側区間にも同じ安全策が拡張された（5.2節）。恒久対応は次のとおり最優先で残っている。
+5章の比較方向の設計判断は、v2.4での修正提案が外部レビューにより不十分と指摘され、v2.5で安全策（片側区間は自動判定しない）に見直され（5.1節）、さらにv2.6で両側区間にも同じ安全策が拡張された（5.2節）。「区間の意味候補（`interval_semantics`）の設計」は8章で着手した。残る検討候補は次のとおり。
 
-1. **区間の意味候補（`interval_semantics`）の設計**（最優先。レビュー提案の`achieved_point`/`capability_domain`/`acceptable_region`/`guaranteed_minimum`/`guaranteed_maximum`/`outcome_range`/`unknown`を、本プロトタイプの`property_candidates`と同様の確信度付き候補として生成する設計。高確信度のみ自動採用、曖昧な場合は要確認とする方針で、人間の作業を増やさないことを目指す）
-2. 概念辞書（`CONCEPT_DICTIONARY`）の運用方法：案件ごとの手動メンテナンスか、タグ辞書からの自動生成か
-3. 概念候補の確信度スコアリング（現在は単位次元0.4+周辺語0.35+タグ0.25の単純加算）の妥当性検証。より多くの実データでの調整が必要
-4. `unknown`ロール（出典列が標準機種情報・検討結果のいずれでもない場合）の扱い
-5. 条件候補（`role=condition`）を、意味対応付けの観点でどう活用するか（現状はグルーピングに参加するだけで、比較には使われていない）
+1. 概念辞書（`CONCEPT_DICTIONARY`）の運用方法：案件ごとの手動メンテナンスか、タグ辞書からの自動生成か
+2. 概念候補の確信度スコアリング（現在は単位次元0.4+周辺語0.35+タグ0.25の単純加算）の妥当性検証。より多くの実データでの調整が必要
+3. `unknown`ロール（出典列が標準機種情報・検討結果のいずれでもない場合）の扱い
+4. 条件候補（`role=condition`）を、意味対応付けの観点でどう活用するか（8章で`test_condition`/`unknown`の候補生成だけは着手したが、比較にはまだ使われていない）
+
+## 8. 工程3拡張：interval_semantics候補生成（v2.9で着手）
+
+### 8.1 経緯と設計条件
+
+`quantity_extraction_prototype_review.md`0.7節でコメントされたとおり、比較エンジン（`coverageGap()`）側の基盤はv2.8で一旦完成と評価された。外部レビューは続けて、次工程（`interval_semantics`候補生成）に着手してよいと判断したうえで、次の設計条件を提示した。
+
+1. 単一候補ではなく候補配列にする（曖昧性・代替解釈を失わない）
+2. `acceptable_region`は要求側の意味として扱う（要求側は`acceptable_region`/`required_capability_domain`、実仕様側は`achieved_point`/`capability_domain`/`outcome_range`/`guaranteed_minimum`/`guaranteed_maximum`のように、値空間を側ごとに分ける）
+3. `comparisonMode`は単独レコードではなく、要求側×実仕様側のペアから導出する
+4. 根拠は`{type, value, source_text, effect, weight}`のように構造化して保存する（否定根拠`effect:'opposes'`も持つ）
+5. 数量の形だけで意味を決めない
+6. 高確信度でも`confirmed`はfalseのまま（`confirmed`＝人間が確定したか、`auto_applicable`＝暫定比較へ自動利用してよいか、を分離する）
+7. 自動適用条件は確信度の単純な閾値だけでなく、候補間の差・否定根拠の有無・抽出警告・設計特性の対応確信度等を組み合わせる
+8. 対照テスト（同じ数量形状で文脈だけを変える）・誤判定防止テストを用意する
+9. 実装順序：意味候補スキーマ→根拠スキーマ→HVACサンプル限定ルール→候補配列生成→ペアからのmode導出→auto_applicable判定→`coverageGap()`接続→対照/誤判定テスト→設計文書記録
+
+本節はこの条件に沿って実装した内容を記録する。付属ファイルは`semantic_mapping_prototype.js`のまま（新規ファイルを作らず、工程3の拡張として同一ファイルに追加した）。
+
+### 8.2 スキーマ
+
+`buildPropertyCandidateRecords`の各レコードに`interval_semantics_candidates`を追加した。
+
+```js
+{
+  // ...(property_candidates, role_candidate等は既存のまま)
+  interval_semantics_candidates: [
+    {
+      value: 'capability_domain',
+      confidence: 0.65,
+      evidence: [
+        { type: 'keyword', value: 'capability_domain', source_text: '0 ℃から50 ℃で使用可能', effect: 'supports', weight: 0.55 },
+        { type: 'quantity_shape', value: 'capability_domain', source_text: '0 ℃から50 ℃で使用可能', effect: 'supports', weight: 0.1 },
+      ],
+    },
+    { value: 'unknown', confidence: 0.15, evidence: [ /* ... */ ] },
+  ],
+}
+```
+
+候補は確信度降順の配列で保持し、最上位候補だけを残さない（設計条件1）。`unknown`は常に最低限の確信度（0.15、`UNKNOWN_BASELINE_CONFIDENCE`）で候補に含め、他の候補が弱い場合の受け皿にする。
+
+意味の語彙は側ごとに分離した（設計条件2）。
+
+| 側 | 語彙 |
+|---|---|
+| 要求側（role='requirement'、side='A'） | `required_capability_domain`（製品が対応すべき条件領域）／`acceptable_region`（達成値が収まるべき許容範囲）／`unknown` |
+| 実仕様側（role='baseline_design'/'resolved_design'、side='B'） | `achieved_point`（達成値）／`capability_domain`（対応可能領域）／`outcome_range`（変動・ばらつき・公差範囲）／`guaranteed_minimum`（保証下限）／`guaranteed_maximum`（保証上限）／`unknown` |
+| 条件節（role='condition'） | `test_condition`（試験・測定条件）／`unknown` |
+
+`comparisonMode`候補は、要求側と実仕様側それぞれの最上位候補のペアから導出する（設計条件3）。
+
+```js
+{
+  comparison_mode_candidate: {
+    value: 'actual_covers_requirement',
+    confidence: 0.65, // たたき台: min(要求側確信度, 実仕様側確信度)
+    derived_from: { requirement_semantics: 'required_capability_domain', actual_semantics: 'capability_domain' },
+    confirmed: false,
+  },
+}
+```
+
+### 8.3 候補生成ルール（HVACサンプル限定のたたき台）
+
+`generatePropertyCandidates`（既存の概念候補生成）と同じ「複数の独立した根拠を積み上げる」設計を踏襲した。役割（要求側/実仕様側/条件節）ごとに、周辺語・数量の形・修飾語(`qualifiers`)・否定語を根拠として`REQUIREMENT_SEMANTICS_RULES`/`ACTUAL_SEMANTICS_RULES`/`CONDITION_SEMANTICS_RULES`（いずれも`semantic_mapping_prototype.js`内で宣言）に定義した。
+
+重要な設計判断は、**数量の形（点/片側/両側）だけの根拠は、`unknown`の既定確信度（0.15）を上回らない重みに抑える**ことである（設計条件5、レビュー9節の誤判定防止指摘に対応）。
+
+- 両側区間であることだけ（周辺語なし）→`capability_domain`重み0.1（`unknown`0.15未満）
+- 片側区間であることだけ（修飾語なし）→`guaranteed_minimum`/`guaranteed_maximum`重み0.1（`unknown`0.15未満）
+- 点であることと実仕様側であること（周辺語なし）→`achieved_point`重み0.3+0.3=0.6（実仕様側の点は最も曖昧性が低いケースであるため、他より高めに設定）
+
+一方、周辺語や修飾語という明示的な根拠があれば、はっきり`unknown`を上回る（例：「使用可能」があれば`capability_domain`重み0.55、`最大`修飾語があれば`guaranteed_maximum`重み0.55）。
+
+点であっても能力キーワードが伴う場合は、`achieved_point`だけでなく`capability_domain`も候補として残るようにした（「対応可能温度は25℃のみ」等。「点だから自動的にachieved_pointにしない」というレビュー指摘への対応）。否定語（「参考値」「目安」「概算」）は、その時点で得点しているすべての候補に一律で負の重みを加える（特定候補だけを狙い撃ちしない設計）。
+
+`comparisonMode`の導出テーブルは、レビューが例示した組み合わせをそのまま採用した。
+
+| 要求側semantics | 実仕様側semantics | comparisonMode |
+|---|---|---|
+| `required_capability_domain` | `achieved_point` | `point_in_region` |
+| `acceptable_region` | `achieved_point` | `point_in_region` |
+| `required_capability_domain` | `capability_domain` | `actual_covers_requirement` |
+| `acceptable_region` | `outcome_range` | `requirement_covers_actual` |
+| `acceptable_region` | `guaranteed_minimum` | `requirement_covers_actual` |
+| `acceptable_region` | `guaranteed_maximum` | `requirement_covers_actual` |
+
+テーブルにない組み合わせ、またはどちらかの最上位候補が`unknown`の場合は`comparisonMode`を導出しない（`null`を返す。推測しない）。
+
+### 8.4 auto_applicable判定
+
+`confirmed`（人間が確定したか）と`auto_applicable`（暫定比較へ自動利用してよいか）を分離した（設計条件6）。`evaluateAutoApplicable()`は次をすべて満たす場合のみ`applicable:true`を返す（たたき台の閾値。要調整）。
+
+- `comparisonMode`候補が導出できている、かつ確信度が0.4以上
+- 要求側候補・実仕様側候補それぞれについて、最上位候補と次点候補の差が0.2以上
+- 否定根拠（`effect:'opposes'`）が最上位候補に付いていない
+- 抽出時の警告（`extraction.warnings`）が要求側・実仕様側ともにゼロ件
+- 設計特性（`property_candidates`）の対応確信度が0.7以上
+
+満たさない場合は`coverageGap()`を呼ばず、`{comparable:false, reason:'確信度不足のため自動適用を見送り(要確認)'}`を返す。誤った「未充足/充足」を返すより、「要確認」に留める方が安全という、これまでの`coverageGap()`側の設計判断（v2.5〜v2.7）と一貫させた。
+
+### 8.5 実データでの検証結果
+
+HVACサンプルの6概念グループ（PDF要求を持つ5グループ）に、`interval_semantics`候補生成→`comparisonMode`導出→`auto_applicable`判定→（適用可能な場合のみ）`coverageGap()`のパイプラインを適用した結果は次のとおり。
+
+| 概念 | 比較 | 実仕様側top候補 | comparisonMode | auto_applicable | 結果 |
+|---|---|---|---|---|---|
+| 周囲使用温度 | 要求 vs 標準機種 | `unknown`（0.15、キーワードなし） | 導出不可 | false | 要確認 |
+| 周囲使用温度 | 要求 vs 検討結果 | `capability_domain`（0.65、「使用可能」） | `actual_covers_requirement`（0.65） | true | 充足（従来どおり10℃不足なし） |
+| 冷房能力 | 要求 vs 標準機種／検討結果 | `achieved_point`（0.60） | `point_in_region`（0.60） | true | 従来どおり（標準機種は2kW不足、検討結果は充足） |
+| 電源電圧 | 要求 vs 標準機種／検討結果 | `achieved_point`（0.60） | `point_in_region`（0.45） | true | 従来どおり（標準機種は不一致、検討結果は充足） |
+| 周波数 | 要求 vs 標準機種／検討結果 | — | — | false | 要確認（下記参照） |
+| 運転騒音 | 要求 vs 標準機種／検討結果 | `achieved_point`（0.60） | `point_in_region`（0.60） | true | 従来どおり（標準機種は超過、検討結果は充足） |
+
+温度の「要求 vs 標準機種」（Excel原文「0 °C～40 °C」）は、`使用可能`等の明示語を含まないため`interval_semantics`が`unknown`となり、`comparisonMode`を導出できず「要確認」のまま留まった。これは**バグではなく意図した挙動**であり、v2.5〜v2.6で確立した「区間の意味が確定できない場合は自動判定しない」という原則を、`interval_semantics`候補生成の入力データそのものが薄い場合にも一貫して適用した結果である。人間が最終確認する対象として提示されることになる。
+
+周波数（要求 vs 標準機種）が「要確認」になったのは、`interval_semantics`ではなく別の基準（設計特性の対応確信度）が理由だった。要求文「定格電源は三相AC 220 V、50 Hzとすること。」には「周波数」という語が literal に出現しないため、`property_candidates`（工程3の概念候補、4章のスコアリング）の段階で50Hzの対応確信度が0.65（単位次元一致0.4+タグ一致0.25。周辺語一致0.35が付かない）に留まり、`auto_applicable`のPROPERTY_CONFIDENCE_THRESHOLD（0.7）を下回った。**この判定は、interval_semantics候補生成より前段の概念候補スコアリング自体が持っていた既存の弱さを、auto_applicableゲートが正しく検出した例**であり、意図どおりの安全側の停止である。
+
+### 8.6 対照テスト・ペア導出テスト・誤判定防止テスト
+
+レビュー提示の対照テスト（8節）・ペア導出テスト（8節）・誤判定防止テスト（9節）を、いずれも実際に`node semantic_mapping_prototype.js`で実行して確認した（28件中28件成功。8章関連は18件）。
+
+- 対照テスト7件：同じ数量形状（`0～50℃`等）でも、周辺語（使用可能／試験／測定結果／変動）や修飾語（最低／最大）が変われば最上位候補が変わることを確認。文脈のない`0～50℃`は`unknown`が最上位のまま（形だけで確定しない）
+- ペア導出テスト4件：`required_capability_domain×capability_domain→actual_covers_requirement`等、レビュー提示の組み合わせが正しく導出されること、`unknown`を含むペアは導出されないことを確認
+- 誤判定防止テスト6件：片側区間だけでは保証下限を確定しない／両側区間だけでは能力領域を確定しない／点+能力キーワードでは`achieved_point`と`capability_domain`が両方候補に残る／±が要求側にある場合は`outcome_range`固定にならず`acceptable_region`候補になる（側によって扱いが分かれることの確認）／「参考値」等の否定根拠があると確信度が下がり`unknown`のままになる／`comparisonMode`確信度が閾値未満なら`auto_applicable`にならない、をそれぞれ確認
+
+対照テストの作成中に、工程4aの修飾語辞書に「最低」（「最小」の同義語）が含まれておらず、単なる点として誤抽出される不具合を発見した。`quantity_extraction_prototype.js` v2.9で「最高・最低」を「最大・最小」の同義語として追加した（詳細は`quantity_extraction_prototype.md`5.12節）。
+
+### 8.7 残課題
+
+- **確信度の重み・閾値の妥当性**：本節の重み（0.1〜0.6）と閾値（modeConfidence0.4、margin0.2、propertyConfidence0.7）はすべてたたき台であり、より多くの実データでの調整を要する（設計条件7の「検証用パラメータとして扱う」という助言のとおり）
+- **要求側の`±`表記**：要求側に`±`（公差）がある場合、`outcome_range`固定にせず`acceptable_region`寄りの候補になることは確認したが、実仕様側の`outcome_range`との組み合わせ（`acceptable_region`×`outcome_range`→`requirement_covers_actual`）以外の、要求側自体が公差表記であるケースの扱いは未検証（HVACサンプルに実例がないため）
+- **概念辞書・確信度スコアリングとの相互作用**：8.5節で見たとおり、`interval_semantics`側が高確信度でも、概念候補（`property_candidates`）側が閾値未満であれば`auto_applicable`にならない。両者の閾値をどう組み合わせるべきかは、より多くの実データで検証が必要
+- **条件節（`role=condition`）の活用**：`test_condition`/`unknown`の候補生成だけ着手し、比較へはまだ使っていない（7章の残課題と同じ）
+- **`lowGap`/`highGap`の表現見直し**：`quantity_extraction_prototype_review.md`0.6節でレビューから提案された`boundaryDelta`/`deltaInterpretation`への変更は未着手のまま

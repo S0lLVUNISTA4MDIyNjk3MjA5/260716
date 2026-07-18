@@ -22,7 +22,191 @@
 // 詳細は quantity_extraction_prototype.md 5.8〜5.9節、quantity_extraction_prototype_review.md
 // 0.4〜0.5節を参照。
 
-const { extractQuantities, coverageGap } = require('./quantity_extraction_prototype.js');
+const { extractQuantities, coverageGap, isGenuinePoint, isEmptyInterval } = require('./quantity_extraction_prototype.js');
+
+// ── interval_semantics 候補生成(v2.9で着手) ──
+// 区間の「形」(点/片側/両側)だけでは、その区間が何を意味するかを一意に決定できない
+// (quantity_extraction_prototype_review.md 0.4〜0.7節のレビュー指摘、および今回のレビューで
+// 明示的に依頼された設計条件)。役割(要求/実仕様)・周辺語・数量の形・修飾語・否定語を
+// 独立した根拠として積み上げ、複数候補を生成する(最上位候補だけを残さない)。
+function isTwoSidedRange(q) {
+  return q.kind === 'interval' && !!q.lower && !!q.upper && !isGenuinePoint(q) && !isEmptyInterval(q);
+}
+function isOneSidedLower(q) { return q.kind === 'interval' && !!q.lower && !q.upper; }
+function isOneSidedUpper(q) { return q.kind === 'interval' && !q.lower && !!q.upper; }
+
+// 要求側(PDF=A側、role='requirement')の意味候補。
+const REQUIREMENT_SEMANTICS_RULES = [
+  { value: 'required_capability_domain', weight: 0.5, evidenceType: 'keyword',
+    match: (text) => /運転できること|使用できること|動作できること|対応できること/.test(text) },
+  { value: 'required_capability_domain', weight: 0.15, evidenceType: 'quantity_shape',
+    match: (text, quantity) => isTwoSidedRange(quantity) },
+  { value: 'acceptable_region', weight: 0.45, evidenceType: 'keyword',
+    match: (text) => /確保すること|以下とすること|以上とすること/.test(text) },
+  { value: 'acceptable_region', weight: 0.3, evidenceType: 'keyword',
+    // 「〜とすること」で終わる一般的な目標値表現(能力表現の語彙とは重複させない)
+    match: (text) => /とすること/.test(text) &&
+      !/確保すること|以下とすること|以上とすること|運転できること|使用できること|動作できること|対応できること/.test(text) },
+  { value: 'acceptable_region', weight: 0.15, evidenceType: 'quantity_shape',
+    match: (text, quantity) => isOneSidedLower(quantity) || isOneSidedUpper(quantity) || isGenuinePoint(quantity) },
+];
+
+// 実仕様側(Excel=B側、role='baseline_design'/'resolved_design')の意味候補。
+const ACTUAL_SEMANTICS_RULES = [
+  { value: 'achieved_point', weight: 0.3, evidenceType: 'quantity_shape',
+    match: (text, quantity) => isGenuinePoint(quantity) && !text.includes('±') },
+  { value: 'achieved_point', weight: 0.3, evidenceType: 'source_role',
+    match: (text, quantity, record, ctx) => isGenuinePoint(quantity) && ctx.side === 'B' },
+  { value: 'capability_domain', weight: 0.55, evidenceType: 'keyword',
+    match: (text, quantity) => isTwoSidedRange(quantity) && /使用可能|対応可能|運転可能/.test(text) },
+  { value: 'capability_domain', weight: 0.1, evidenceType: 'quantity_shape',
+    match: (text, quantity) => isTwoSidedRange(quantity) },
+  // 点であっても、能力キーワードが伴う場合はcapability_domainの可能性も残す
+  // (「点だから自動的にachieved_pointにしない」というレビュー指摘への対応。
+  //  例:「対応可能温度は25℃のみ」は達成値・能力領域のどちらの解釈もあり得る)
+  { value: 'capability_domain', weight: 0.4, evidenceType: 'keyword',
+    match: (text, quantity) => isGenuinePoint(quantity) && /使用可能|対応可能|運転可能/.test(text) },
+  { value: 'outcome_range', weight: 0.6, evidenceType: 'keyword',
+    match: (text) => text.includes('±') },
+  { value: 'outcome_range', weight: 0.5, evidenceType: 'keyword',
+    match: (text) => /変動|ばらつき|測定結果|測定値/.test(text) },
+  { value: 'guaranteed_minimum', weight: 0.55, evidenceType: 'qualifier',
+    match: (text, quantity, record) => (record.qualifiers || []).some(q => q.type === 'minimum') },
+  { value: 'guaranteed_minimum', weight: 0.1, evidenceType: 'quantity_shape',
+    // 片側区間というだけでは弱い根拠に留める(「片側区間だけで保証下限を確定しない」)
+    match: (text, quantity) => isOneSidedLower(quantity) },
+  { value: 'guaranteed_maximum', weight: 0.55, evidenceType: 'qualifier',
+    match: (text, quantity, record) => (record.qualifiers || []).some(q => q.type === 'maximum') },
+  { value: 'guaranteed_maximum', weight: 0.1, evidenceType: 'quantity_shape',
+    match: (text, quantity) => isOneSidedUpper(quantity) },
+];
+
+// 条件節(role='condition')の意味候補。レビュー8節の対照テスト例に基づく最小限の語彙。
+const CONDITION_SEMANTICS_RULES = [
+  { value: 'test_condition', weight: 0.5, evidenceType: 'keyword',
+    match: (text) => /試験|測定/.test(text) },
+];
+
+// 否定根拠: どの候補にも一律に確信度を下げる方向で働く(特定候補だけを狙い撃ちしない)。
+const NEGATIVE_KEYWORD_RULES = [
+  { pattern: /参考値|目安|概算/, weight: -0.3, label: '参考値・目安を示す語' },
+];
+
+const UNKNOWN_BASELINE_CONFIDENCE = 0.15;
+
+// ルール群を1レコードへ適用し、根拠付きの候補配列(確信度降順)を返す。
+// 候補は複数保持する(単一候補にすると代替解釈と曖昧性の情報が失われるというレビュー指摘に対応)。
+function scoreSemantics(rules, text, record, ctx) {
+  const quantity = record.quantity;
+  const shortText = text.length > 80 ? text.slice(0, 80) + '…' : text;
+  const scores = new Map();
+  const bump = (value, weight, evidenceType, effect) => {
+    if (!scores.has(value)) scores.set(value, { score: 0, evidence: [] });
+    const s = scores.get(value);
+    s.score += weight;
+    s.evidence.push({ type: evidenceType, value, source_text: shortText, effect, weight });
+  };
+  for (const rule of rules) {
+    if (rule.match(text, quantity, record, ctx)) bump(rule.value, rule.weight, rule.evidenceType, 'supports');
+  }
+  for (const neg of NEGATIVE_KEYWORD_RULES) {
+    if (neg.pattern.test(text)) {
+      for (const value of [...scores.keys()]) bump(value, neg.weight, 'negative_keyword', 'opposes');
+    }
+  }
+  if (!scores.has('unknown')) {
+    scores.set('unknown', {
+      score: UNKNOWN_BASELINE_CONFIDENCE,
+      evidence: [{ type: 'baseline', value: 'unknown', source_text: '(既定の受け皿。他候補が弱い場合の下限)', effect: 'supports', weight: UNKNOWN_BASELINE_CONFIDENCE }],
+    });
+  }
+  return [...scores.entries()]
+    .map(([value, s]) => ({ value, confidence: Math.max(0, Math.min(0.99, s.score)), evidence: s.evidence }))
+    .filter(c => c.confidence > 0.02)
+    .sort((a, b) => b.confidence - a.confidence);
+}
+
+// ── 1レコード分のinterval_semantics候補を生成する ──
+function generateIntervalSemanticsCandidates(record, ctx) {
+  const text = ctx.nearbyText || record.source_text || '';
+  if (ctx.isConditionValue) return scoreSemantics(CONDITION_SEMANTICS_RULES, text, record, ctx);
+  if (ctx.side === 'A') return scoreSemantics(REQUIREMENT_SEMANTICS_RULES, text, record, ctx);
+  if (ctx.side === 'B') return scoreSemantics(ACTUAL_SEMANTICS_RULES, text, record, ctx);
+  return scoreSemantics([], text, record, ctx);
+}
+
+// ── 要求側semanticsと実仕様側semanticsの組み合わせから、comparisonMode候補を導出する ──
+// 単一レコードだけからcomparisonModeを決めない(レビュー指摘)。未定義の組み合わせや
+// 片方でもunknownの場合は導出しない(推測しない)。
+const COMPARISON_MODE_DERIVATION_TABLE = [
+  { requirement: 'acceptable_region', actual: 'achieved_point', mode: 'point_in_region' },
+  { requirement: 'required_capability_domain', actual: 'achieved_point', mode: 'point_in_region' },
+  { requirement: 'required_capability_domain', actual: 'capability_domain', mode: 'actual_covers_requirement' },
+  { requirement: 'acceptable_region', actual: 'outcome_range', mode: 'requirement_covers_actual' },
+  { requirement: 'acceptable_region', actual: 'guaranteed_minimum', mode: 'requirement_covers_actual' },
+  { requirement: 'acceptable_region', actual: 'guaranteed_maximum', mode: 'requirement_covers_actual' },
+];
+
+function deriveComparisonModeCandidate(requirementCandidates, actualCandidates) {
+  const reqTop = requirementCandidates?.[0];
+  const actTop = actualCandidates?.[0];
+  if (!reqTop || !actTop || reqTop.value === 'unknown' || actTop.value === 'unknown') return null;
+  const entry = COMPARISON_MODE_DERIVATION_TABLE.find(e => e.requirement === reqTop.value && e.actual === actTop.value);
+  if (!entry) return null;
+  return {
+    value: entry.mode,
+    confidence: Math.min(reqTop.confidence, actTop.confidence), // たたき台: 保守的にminを採用。要調整
+    derived_from: { requirement_semantics: reqTop.value, actual_semantics: actTop.value },
+    confirmed: false,
+  };
+}
+
+// ── 高確信度候補を暫定比較へ自動利用してよいかを判定する ──
+// confirmed(人間が確定したか)とauto_applicable(暫定比較へ自動利用してよいか)は分離する。
+// 自動適用しても、人間が確定したことにはならない。閾値は検証用パラメータであり、
+// 本体統合前に実データでの再調整を要する(たたき台)。
+const AUTO_APPLICABLE_THRESHOLDS = {
+  modeConfidence: 0.4,
+  margin: 0.2,
+  propertyConfidence: 0.7,
+};
+
+function marginOf(candidates) {
+  if (!candidates || candidates.length === 0) return 0;
+  if (candidates.length === 1) return candidates[0].confidence;
+  return candidates[0].confidence - candidates[1].confidence;
+}
+function hasOpposingEvidence(candidates) {
+  const top = candidates?.[0];
+  return !!(top && top.evidence.some(e => e.effect === 'opposes'));
+}
+
+function evaluateAutoApplicable({ modeCandidate, requirementCandidates, actualCandidates, propertyConfidence, extractionWarningsCount }) {
+  const th = AUTO_APPLICABLE_THRESHOLDS;
+  const reasons = [];
+  const failReasons = [];
+  if (!modeCandidate) {
+    failReasons.push('comparison_mode候補を導出できない(片方がunknown、または未定義の組み合わせ)');
+  } else if (modeCandidate.confidence >= th.modeConfidence) {
+    reasons.push(`comparison_mode確信度${modeCandidate.confidence.toFixed(2)}が閾値${th.modeConfidence}以上`);
+  } else {
+    failReasons.push(`comparison_mode確信度${modeCandidate.confidence.toFixed(2)}が閾値${th.modeConfidence}未満`);
+  }
+  const reqMargin = marginOf(requirementCandidates);
+  const actMargin = marginOf(actualCandidates);
+  if (reqMargin >= th.margin) reasons.push(`要求側候補の差${reqMargin.toFixed(2)}が閾値${th.margin}以上`);
+  else failReasons.push(`要求側候補の差${reqMargin.toFixed(2)}が閾値${th.margin}未満`);
+  if (actMargin >= th.margin) reasons.push(`実仕様側候補の差${actMargin.toFixed(2)}が閾値${th.margin}以上`);
+  else failReasons.push(`実仕様側候補の差${actMargin.toFixed(2)}が閾値${th.margin}未満`);
+  if (!hasOpposingEvidence(requirementCandidates) && !hasOpposingEvidence(actualCandidates)) reasons.push('否定根拠なし');
+  else failReasons.push('否定根拠あり');
+  if (extractionWarningsCount === 0) reasons.push('抽出警告なし');
+  else failReasons.push(`抽出警告${extractionWarningsCount}件`);
+  if (propertyConfidence >= th.propertyConfidence) reasons.push(`設計特性の対応確信度${propertyConfidence.toFixed(2)}が閾値${th.propertyConfidence}以上`);
+  else failReasons.push(`設計特性の対応確信度${(propertyConfidence || 0).toFixed(2)}が閾値${th.propertyConfidence}未満`);
+
+  return { applicable: failReasons.length === 0, reasons, fail_reasons: failReasons };
+}
 
 // ── 概念辞書(たたき台)。案件の共通タグ辞書と同じ語彙をここでも利用する ──
 const CONCEPT_DICTIONARY = [
@@ -149,6 +333,7 @@ function buildPropertyCandidateRecords(text, ctx) {
       quantity_record: q, // 工程4aの構造化オブジェクトをそのまま保持(文字列化しない)
       property_candidates: generatePropertyCandidates(q, ctx),
       role_candidate: inferRole({ ...ctx, isConditionValue: false }),
+      interval_semantics_candidates: generateIntervalSemanticsCandidates(q, { ...ctx, isConditionValue: false }),
       confirmed: false, // 候補のみ。人間が確認するまでfalseのまま
     });
     // 条件候補(condition_candidates)も、それ自体が別の意味対応付け対象になり得るため候補化する
@@ -160,6 +345,7 @@ function buildPropertyCandidateRecords(text, ctx) {
         quantity_record: ccRecord,
         property_candidates: generatePropertyCandidates(ccRecord, ctx),
         role_candidate: inferRole({ ...ctx, isConditionValue: true }),
+        interval_semantics_candidates: generateIntervalSemanticsCandidates(ccRecord, { ...ctx, isConditionValue: true }),
         confirmed: false,
       });
     });
@@ -180,12 +366,45 @@ function groupByTopConcept(records, minConfidence = 0.5) {
       role_confidence: r.role_candidate.confidence,
       concept_confidence: top.confidence,
       quantity_record: r.quantity_record,
+      interval_semantics_candidates: r.interval_semantics_candidates,
     });
   }
   return [...groups.values()];
 }
 
-module.exports = { generatePropertyCandidates, inferRole, buildPropertyCandidateRecords, groupByTopConcept, CONCEPT_DICTIONARY };
+// ── 概念グループ単位で、要求×実仕様(baseline_design/resolved_design)の比較を自動導出する ──
+// interval_semantics候補→comparisonMode候補→auto_applicable判定→(適用可能な場合のみ)coverageGap()
+// の順で処理する。確信度不足の場合はcoverageGap()を呼ばず「要確認」のまま留める。
+function autoCompareGroup(group) {
+  const req = group.members.find(m => m.role === 'requirement');
+  if (!req) return { concept_id: group.concept_id, label: group.label, comparisons: [] };
+  const comparisons = [];
+  for (const role of ['baseline_design', 'resolved_design']) {
+    const actual = group.members.find(m => m.role === role);
+    if (!actual) continue;
+    const modeCandidate = deriveComparisonModeCandidate(req.interval_semantics_candidates, actual.interval_semantics_candidates);
+    const extractionWarningsCount =
+      (req.quantity_record.extraction?.warnings.length || 0) + (actual.quantity_record.extraction?.warnings.length || 0);
+    const autoApplicable = evaluateAutoApplicable({
+      modeCandidate,
+      requirementCandidates: req.interval_semantics_candidates,
+      actualCandidates: actual.interval_semantics_candidates,
+      propertyConfidence: Math.min(req.concept_confidence, actual.concept_confidence),
+      extractionWarningsCount,
+    });
+    const comparison = autoApplicable.applicable
+      ? coverageGap(req.quantity_record, actual.quantity_record, { comparisonMode: modeCandidate.value })
+      : { comparable: false, reason: '確信度不足のため自動適用を見送り(要確認)' };
+    comparisons.push({ role, requirement_top: req.interval_semantics_candidates[0], actual_top: actual.interval_semantics_candidates[0], modeCandidate, autoApplicable, comparison });
+  }
+  return { concept_id: group.concept_id, label: group.label, comparisons };
+}
+
+module.exports = {
+  generatePropertyCandidates, inferRole, buildPropertyCandidateRecords, groupByTopConcept, CONCEPT_DICTIONARY,
+  generateIntervalSemanticsCandidates, deriveComparisonModeCandidate, evaluateAutoApplicable, autoCompareGroup,
+  COMPARISON_MODE_DERIVATION_TABLE,
+};
 
 // ── 単体実行時のデモ・テスト出力 ──
 if (require.main === module) {
@@ -234,22 +453,23 @@ if (require.main === module) {
     g.members.forEach(m => console.log(`  role=${m.role.padEnd(16)} concept_conf=${m.concept_confidence.toFixed(2)} source=${m.source} quantity=${JSON.stringify(m.quantity_record.quantity)}`));
   }
 
-  console.log('\n\n########## 4. 工程5への自動橋渡し: グループ内でrequirement×baseline_design×resolved_designを自動比較 ##########');
-  console.log('【v2.6時点の制約】coverageGap()は、達成値(単一の点)との比較はcomparisonMode指定なしで');
-  console.log('自動判定できるが(冷房能力・電圧・周波数・騒音)、両側区間どうしの比較(温度)は、');
-  console.log('その区間が「対応可能領域」か「変動範囲」かをこのループ自体が知らないため、');
-  console.log('comparisonModeを渡さない限り自動では判定せずcomparable:falseを返す(意図的な安全策)。');
-  console.log('これは、区間の意味候補(interval_semantics)を工程3が生成しない限り、工程5の自動橋渡しが');
-  console.log('温度のような両側区間の比較には使えないことを、実データで示している。');
-  for (const g of groups) {
-    const req = g.members.find(m => m.role === 'requirement');
-    const baseline = g.members.find(m => m.role === 'baseline_design');
-    const resolved = g.members.find(m => m.role === 'resolved_design');
-    if (!req) continue;
-    console.log(`\n--- ${g.label} (${g.concept_id}) ---`);
-    if (baseline) console.log('  要求 vs 標準機種:', coverageGap(req.quantity_record, baseline.quantity_record));
-    if (resolved) console.log('  要求 vs 検討結果:', coverageGap(req.quantity_record, resolved.quantity_record));
-    if (!baseline && !resolved) console.log('  (Excel側の対応候補なし)');
+  console.log('\n\n########## 4. 工程5への自動橋渡し: interval_semantics候補→comparisonMode候補→auto_applicable判定 ##########');
+  console.log('区間の形(点/片側/両側)だけでは意味を確定しない。役割・周辺語・修飾語等から');
+  console.log('interval_semantics候補を生成し、要求側×実仕様側の組み合わせからcomparisonMode候補を');
+  console.log('導出する。確信度・候補間の差・否定根拠・抽出警告・設計特性の対応確信度が全て基準を');
+  console.log('満たす場合のみcoverageGap()を自動実行し、そうでなければ「要確認」のまま留める。');
+  const autoResults = groups.map(autoCompareGroup);
+  for (const gr of autoResults) {
+    if (gr.comparisons.length === 0) continue;
+    console.log(`\n--- ${gr.label} (${gr.concept_id}) ---`);
+    for (const c of gr.comparisons) {
+      const roleLabel = c.role === 'baseline_design' ? '要求 vs 標準機種' : '要求 vs 検討結果';
+      console.log(`  ${roleLabel}:`);
+      console.log(`    要求側top候補: ${c.requirement_top?.value}(${c.requirement_top?.confidence.toFixed(2)}) / 実仕様側top候補: ${c.actual_top?.value}(${c.actual_top?.confidence.toFixed(2)})`);
+      console.log(`    comparisonMode候補: ${c.modeCandidate ? `${c.modeCandidate.value}(${c.modeCandidate.confidence.toFixed(2)})` : '(導出不可)'}`);
+      console.log(`    auto_applicable: ${c.autoApplicable.applicable} ${c.autoApplicable.applicable ? '['+c.autoApplicable.reasons.join('; ')+']' : '['+c.autoApplicable.fail_reasons.join('; ')+']'}`);
+      console.log(`    比較結果: ${JSON.stringify(c.comparison)}`);
+    }
   }
 
   console.log('\n\n########## 5. 完了条件チェック(自動アサーション) ##########');
@@ -264,18 +484,33 @@ if (require.main === module) {
   const tempReq = tempGroup?.members.find(m => m.role === 'requirement');
   const tempBaseline = tempGroup?.members.find(m => m.role === 'baseline_design');
   const tempResolved = tempGroup?.members.find(m => m.role === 'resolved_design');
-  // v2.6: 温度の要求・実仕様は両方とも「対応可能領域」であることが分かっているため、
-  // comparisonMode: 'actual_covers_requirement'を明示する。本来この判断は工程3の
-  // interval_semantics候補生成が担うべきものであり、ここでは既知の前提として仮に固定している
-  // （4章の自動橋渡しループはこの前提を持たないため、comparable:falseを返すことに注意）。
-  if (tempReq && tempBaseline) {
-    const g1 = coverageGap(tempReq.quantity_record, tempBaseline.quantity_record, { comparisonMode: 'actual_covers_requirement' });
-    check('自動グルーピング経由でも「標準機種は10℃不足」を再現(comparisonMode明示時は正しく動く)', g1.satisfied === false && g1.highGap === 10);
-  }
-  if (tempReq && tempResolved) {
-    const g2 = coverageGap(tempReq.quantity_record, tempResolved.quantity_record, { comparisonMode: 'actual_covers_requirement' });
-    check('自動グルーピング経由でも「検討結果は充足」を再現(comparisonMode明示時は正しく動く)', g2.satisfied === true && g2.highGap === 0);
-  }
+
+  // v2.9: interval_semantics候補生成→comparisonMode自動導出のパイプラインを、温度概念グループで検証する。
+  // 標準機種情報「0 °C～40 °C」にはcapability_domainを示す明示的な語(使用可能等)がなく、
+  // 実仕様側のtop候補が'unknown'になるため、comparisonModeを導出できず「要確認」のまま
+  // 留まる(誤った自動判定より安全)。検討結果「0 °C～50 °Cで使用可能」は「使用可能」という
+  // 明示語があるためcapability_domainとして自動導出でき、要求側の「運転できること」と
+  // 組み合わさってactual_covers_requirementが導出され、自動適用される。
+  const tempAuto = autoCompareGroup(tempGroup);
+  const tempBaselineResult = tempAuto.comparisons.find(c => c.role === 'baseline_design');
+  const tempResolvedResult = tempAuto.comparisons.find(c => c.role === 'resolved_design');
+  check('温度/標準機種: キーワードなしの両側区間はinterval_semanticsがunknownとなり、要確認のまま留まる(自動判定しない)',
+    tempBaselineResult && tempBaselineResult.actual_top.value === 'unknown' &&
+    tempBaselineResult.modeCandidate === null && tempBaselineResult.comparison.comparable === false);
+  check('温度/検討結果: 「使用可能」を根拠にcapability_domainが自動導出され、要求と組み合わせてactual_covers_requirementが自動適用される',
+    tempResolvedResult && tempResolvedResult.actual_top.value === 'capability_domain' &&
+    tempResolvedResult.modeCandidate?.value === 'actual_covers_requirement' &&
+    tempResolvedResult.autoApplicable.applicable === true &&
+    tempResolvedResult.comparison.satisfied === true && tempResolvedResult.comparison.highGap === 0);
+
+  // 冷房能力・電圧・騒音は、達成値(点)であることの構造的根拠と実仕様側であることの役割根拠
+  // だけで、明示的なキーワードがなくてもpoint_in_regionが自動導出されることを確認する
+  // (このパイプラインが温度以外の実データでも自動化を進められることの実演)。
+  const coolingAuto = autoCompareGroup(groups.find(g => g.concept_id === 'performance.cooling_capacity'));
+  const coolingResolvedResult = coolingAuto.comparisons.find(c => c.role === 'resolved_design');
+  check('冷房能力/検討結果: キーワードなしの達成値でもpoint_in_regionが自動導出・自動適用される',
+    coolingResolvedResult?.modeCandidate?.value === 'point_in_region' &&
+    coolingResolvedResult.autoApplicable.applicable === true && coolingResolvedResult.comparison.satisfied === true);
 
   const coolingGroup = groups.find(g => g.concept_id === 'performance.cooling_capacity');
   check('冷房能力の概念グループも生成される', !!coolingGroup);
@@ -307,6 +542,85 @@ if (require.main === module) {
     check('【v2.6で追加確認】両側区間(温度)はcomparisonMode未指定では自動橋渡しループも比較不能を返す',
       g.comparable === false);
   }
+
+  // ── v2.9: interval_semantics 対照テスト(同じ数量形状でも文脈が変われば候補が変わることの確認) ──
+  function actTop(text) {
+    const r = extractQuantities(text)[0];
+    return generateIntervalSemanticsCandidates(r, { side: 'B', nearbyText: text })[0];
+  }
+  function condTop(text) {
+    const r = extractQuantities(text)[0];
+    return generateIntervalSemanticsCandidates(r, { side: 'B', isConditionValue: true, nearbyText: text })[0];
+  }
+  check('対照: 「0～50℃で使用可能」→capability_domainが最上位候補になる',
+    actTop('0 ℃から50 ℃で使用可能').value === 'capability_domain');
+  check('対照: 「試験温度は0～50℃」→test_conditionが最上位候補になる',
+    condTop('試験温度は0 ℃から50 ℃')?.value === 'test_condition');
+  check('対照: 「測定結果は0～50℃」→outcome_rangeが最上位候補になる',
+    actTop('測定結果は0 ℃から50 ℃').value === 'outcome_range');
+  check('対照: 「電圧は220±10Vで変動する」→outcome_rangeが最上位候補になる',
+    actTop('電圧は220±10Vで変動する').value === 'outcome_range');
+  check('対照: 「冷房能力は最低15kW」→guaranteed_minimumが最上位候補になる(最低=最小の同義語、工程4a v2.9対応)',
+    actTop('冷房能力は最低15kW').value === 'guaranteed_minimum');
+  check('対照: 「騒音は最大58dB(A)」→guaranteed_maximumが最上位候補になる',
+    actTop('騒音は最大58dB(A)').value === 'guaranteed_maximum');
+  check('対照: 文脈のない「0～50℃」はunknownが最上位候補になる(形だけでcapability_domainを確定しない)',
+    actTop('0 ℃から50 ℃').value === 'unknown');
+
+  // ── v2.9: comparisonMode導出の対照テスト(ペアの組み合わせで結果が変わることの確認) ──
+  function pairMode(reqText, actText, reqCtx = { side: 'A' }, actCtx = { side: 'B' }) {
+    const reqRecord = extractQuantities(reqText)[0];
+    const actRecord = extractQuantities(actText)[0];
+    const reqC = generateIntervalSemanticsCandidates(reqRecord, { ...reqCtx, nearbyText: reqText });
+    const actC = generateIntervalSemanticsCandidates(actRecord, { ...actCtx, nearbyText: actText });
+    return deriveComparisonModeCandidate(reqC, actC);
+  }
+  check('ペア導出: required_capability_domain×capability_domain→actual_covers_requirement',
+    pairMode('装置は0 ℃から50 ℃の環境で正常に運転できること。', '0 ℃から50 ℃で使用可能')?.value === 'actual_covers_requirement');
+  check('ペア導出: acceptable_region×achieved_point→point_in_region',
+    pairMode('冷房能力12 kW以上を確保すること。', '冷房能力は12.5 kW')?.value === 'point_in_region');
+  check('ペア導出: acceptable_region×outcome_range→requirement_covers_actual',
+    pairMode('電源電圧は200 Vから240 Vの範囲とすること。', '電源電圧は220±10 Vで変動する')?.value === 'requirement_covers_actual');
+  check('ペア導出: unknownを含むペアはcomparison_mode候補を導出しない(comparable:falseへ)',
+    pairMode('冷房能力12 kW以上を確保すること。', '冷房能力は0 kWから20 kWまで')?.value === undefined ||
+    pairMode('冷房能力12 kW以上を確保すること。', '冷房能力は0 kWから20 kWまで') === null);
+
+  // ── v2.9: 誤判定防止テスト(レビュー9節。工程3でも過去の教訓を再発防止として固定する) ──
+  check('誤判定防止: 片側区間(15kW以上)だけでは保証下限を確定しない(unknownが最上位のまま)',
+    actTop('15 kW以上').value === 'unknown');
+  check('誤判定防止: 両側区間(0～50℃)だけでは能力領域を確定しない(unknownが最上位のまま、既出だが明示的に再確認)',
+    actTop('0 ℃から50 ℃').value === 'unknown');
+  {
+    // 点であっても能力キーワードが伴う場合は、achieved_pointだけでなくcapability_domainも
+    // 候補として残ることを確認する(「点だから自動的にachieved_pointにしない」)。
+    const c = actTop('対応可能温度は25 ℃のみ');
+    const c2 = generateIntervalSemanticsCandidates(extractQuantities('対応可能温度は25 ℃のみ')[0], { side: 'B', nearbyText: '対応可能温度は25 ℃のみ' });
+    check('誤判定防止: 点+能力キーワードでは、achieved_pointだけでなくcapability_domainも候補として残る',
+      c2.some(x => x.value === 'achieved_point') && c2.some(x => x.value === 'capability_domain'));
+  }
+  {
+    // ±があっても、要求側(許容差)と実仕様側(変動・ばらつき)で扱いが分かれることを確認する。
+    const reqSide = generateIntervalSemanticsCandidates(extractQuantities('電源電圧は220±10 Vとすること。')[0],
+      { side: 'A', nearbyText: '電源電圧は220±10 Vとすること。' });
+    check('誤判定防止: ±が要求側にある場合、outcome_range固定ではなくacceptable_region候補が生成される(側によって扱いが分かれる)',
+      reqSide[0]?.value === 'acceptable_region');
+  }
+  {
+    // 否定根拠(参考値・目安等)がある場合、確信度が下がりunknownへ寄ることを確認する。
+    const c = actTop('参考値として0 ℃から50 ℃');
+    check('誤判定防止: 「参考値」等の否定根拠があると、候補の確信度が下がりunknownが最上位のままになる',
+      c.value === 'unknown');
+  }
+  check('誤判定防止: comparison_mode確信度が閾値未満の場合はauto_applicableにならない(冷房能力の閾値vs超過値ペアで確認)',
+    (() => {
+      const reqRecord = extractQuantities('冷房能力12 kW以上を確保すること。')[0];
+      const actRecord = extractQuantities('冷房能力は0 kWから20 kWまで')[0];
+      const reqC = generateIntervalSemanticsCandidates(reqRecord, { side: 'A', nearbyText: '冷房能力12 kW以上を確保すること。' });
+      const actC = generateIntervalSemanticsCandidates(actRecord, { side: 'B', nearbyText: '冷房能力は0 kWから20 kWまで' });
+      const modeCandidate = deriveComparisonModeCandidate(reqC, actC);
+      const evalResult = evaluateAutoApplicable({ modeCandidate, requirementCandidates: reqC, actualCandidates: actC, propertyConfidence: 0.99, extractionWarningsCount: 0 });
+      return modeCandidate === null && evalResult.applicable === false;
+    })());
 
   assertions.forEach(a => console.log((a.pass ? '[OK] ' : '[FAIL] ') + a.name));
   const failCount = assertions.filter(a => !a.pass).length;
