@@ -85,7 +85,7 @@ if (require.main === module) {
   const assertions = [];
   const check = (name, cond) => assertions.push({ name, pass: !!cond });
 
-  check(`実文16件すべてに対応する数量が抽出される(実際: ${r.extractedZero}件失敗)`, r.extractedZero === 0);
+  check(`実文${r.sentences.length}件すべてに対応する数量が抽出される(実際: ${r.extractedZero}件失敗)`, r.extractedZero === 0);
   check(`抽出数量が20件以上ある(実際: ${r.totalQuantities}件)`, r.totalQuantities >= 20);
   check(`B側の誤昇格(構造的根拠だけで閾値0.4を超える)はゼロ件(実際: ${r.crossedThreshold}件、最大確信度${r.maxBConfidence.toFixed(2)})`,
     r.crossedThreshold === 0);
@@ -94,10 +94,11 @@ if (require.main === module) {
   const failCount = assertions.filter(a => !a.pass).length;
   console.log(`\n合計 ${assertions.length}件中 ${assertions.length - failCount}件成功 / ${failCount}件失敗`);
 
-  console.log('\n【残された限界(この検証で判明)】');
-  console.log('1. 単位辞書のカバー範囲: この文書全体で数値+単位を含む文は107件見つかったが、工程4aが');
-  console.log('   対応する5単位(℃/kW/V/Hz/dB(A))のいずれかを含むのは16件(約15%)のみだった。残りは');
-  console.log('   mm・MPa・kPa・kgf/cm²・m³/h・N・rpm・%等、未対応の単位を使っている。');
+  console.log('\n【残された限界(この検証で判明。詳細はsemantic_mapping_prototype.md 8.18〜8.19節)】');
+  console.log('1. 単位辞書のカバー範囲: この文書全体で数値+単位を含む文は112件見つかった。工程4aが対応する');
+  console.log('   単位(℃/kW/V/Hz/dB(A)/mm/MPa/kPa/Pa/kVA)のいずれかを含むのは106件(約95%)。mmが元々');
+  console.log('   対応していたため大半をカバーしていたが、A(アンペア)・L(リットル)は鋼種型番(SUS304L等)と');
+  console.log('   衝突する誤検出が実データで確認されたため追加を見送っており、その分は依然未対応。');
   console.log('2. 要求側キーワード語彙のカバー範囲: REQUIREMENT_SEMANTICS_RULESの「とすること」パターンは、');
   console.log('   この文書で頻出する平叙文形の「とする」（「〜とすること」ではなく「〜とする。」）に一致');
   console.log('   しないため、A側候補は全件が構造的根拠のみ(確信度0.15)に留まった。詳細は');

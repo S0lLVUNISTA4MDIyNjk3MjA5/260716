@@ -1,4 +1,4 @@
-// 工程4a（数量抽出）たたき台プロトタイプ v2.10
+// 工程4a（数量抽出）たたき台プロトタイプ v2.11
 // tools/design_notes/quantity_extraction_prototype_review.md の必須修正6項目
 // （符号付き数値／区間統合／境界包含区分／原文保持／暫定判定明示／条件誤伝播防止）
 // および、そのレビュー過程で追加発見した2件（±公差、桁区切りカンマ）を反映。
@@ -48,8 +48,26 @@
 //        区切りなく結合したテキスト(「表2.1.9200V」)から無意味な数量「1.9200V」を誤って
 //        抽出する不具合を発見。数値トークンの先頭に、直前が数字・ピリオドでないことを要求
 //        する境界チェックを追加して対応(詳細は5.13節参照)。
+// v2.11: 同じ実データ検証で、(1)全角英字(Ａ/Ｖ等)で書かれた単位が一切認識されない不具合を
+//        発見し、全角ASCII全体を1文字ずつ半角化する正規化へ拡張、(2)JIS Z 8203に準拠する
+//        圧力(MPa/kPa/Pa)・皮相電力(kVA)単位を追加。あわせて、単一アルファベット1文字の単位
+//        (A=アンペア、L=リットル)も候補に挙がったが、実データへ適用したところ鋼種型番
+//        (SUS304L等)と衝突し誤検出になることが判明したため追加を見送った(詳細は5.14節)。
 // 依存ライブラリなし。 `node quantity_extraction_prototype.js` で単体実行できる。
 
+// v2.11(実データ検証で発見): real_corpus_validation.js(8.18節)で、国土交通省「公共建築工事
+// 標準仕様書」の実文107件のうち、対応5単位を含むのはわずか16件(約15%)だったことが判明した。
+// 残りの大半で使われていた単位のうち、実際に文書内で複数回・一貫して正しく現れることを
+// 確認できたもの(MPa=圧力、kVA=皮相電力)を、JIS Z 8203(国際単位系(SI)及びその使い方)に
+// 準拠する単位として追加する。JIS Z 8203はSI単位系での圧力をPa(ゲージ圧)・kPa・MPaで表す
+// ことを規定しており、MPaと同じ接尾辞を持つkPa・Paも一貫性のため合わせて追加した。
+//
+// 【安全側に倒して見送った単位】A(アンペア)とL(リットル)も同じ実データ調査で候補に挙がったが、
+// 実際にこの文書へ適用したところ、Aは4件中2件(96.5A、18A)、Lは7件中7件(304L、316Lは全て
+// SUS304L/SUS316Lというステンレス鋼種の型番であり、単位ではない)が誤検出だった。単一の
+// アルファベット1文字だけの単位記号は、型番・合金成分比率・製品コード等の数字列と衝突しやすく、
+// 実データで安全性を確認できなかったため追加を見送った(8.12節・8.17節と同じ「実データで
+// 検証できない拡張は行わない」原則。詳細はsemantic_mapping_prototype.md 8.19節を参照)。
 const UNIT_DEFS = [
   { source: '°C', canonical: 'degC', dimension: 'temperature' },
   { source: '℃', canonical: 'degC', dimension: 'temperature' },
@@ -58,8 +76,12 @@ const UNIT_DEFS = [
   { source: 'Hz', canonical: 'Hz', dimension: 'frequency' },
   { source: 'dB(A)', canonical: 'dB(A)', dimension: 'sound_pressure_level' },
   { source: 'mm', canonical: 'mm', dimension: 'length' },
+  { source: 'MPa', canonical: 'MPa', dimension: 'pressure' },
+  { source: 'kPa', canonical: 'kPa', dimension: 'pressure' },
+  { source: 'Pa', canonical: 'Pa', dimension: 'pressure' },
+  { source: 'kVA', canonical: 'kVA', dimension: 'apparent_power' },
 ];
-const UNIT_ALT = '°C|℃|kW|V|Hz|dB\\(A\\)|mm';
+const UNIT_ALT = '°C|℃|kW|kVA|V|Hz|dB\\(A\\)|mm|MPa|kPa|Pa';
 
 function unitInfo(raw) {
   const def = UNIT_DEFS.find(u => u.source === raw);
@@ -73,9 +95,16 @@ const CONTEXT_TOKENS = ['三相', '単相', 'AC', 'DC', '交流', '直流', '定
 // 全角→半角の1:1文字置換のみ行う(文字数・位置を変えない)。
 // これにより、抽出したspanをそのまま元のtextへ適用してsource_textを取り出せる
 // （正規化前の原文と、正規化後の文字列を両方保持できる＝レビュー2.4への対応）。
+// v2.11(実データ検証で発見): 全角英字(Ａ/Ｖ等)は単位記号としても実際の政府調達仕様書に
+// 現れる（例:「定格電流が15Ａ」）が、修正前は全角数字・全角ピリオドしか変換しておらず、
+// 全角のまま書かれた単位は(数字と英字がともに全角でも)一切認識できなかった。全角ASCII
+// (U+FF01-U+FF5E)はUnicodeの定義上、対応する半角ASCII(U+0021-U+007E)から一律+0xFEE0だけ
+// シフトした位置にあるため、オフセット計算で1文字→1文字のまま包括的に半角化できる
+// (数字・英字・括弧・カンマ等を、個別の文字表を保守せず一度にカバーする)。
 function normalizeText1to1(text) {
   return text
-    .replace(/[０-９．]/g, ch => '0123456789.'['０１２３４５６７８９．'.indexOf(ch)])
+    .replace(/[！-～]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0))
+    // 全角ASCIIブロックに含まれない別のマイナス記号(U+2212)・波ダッシュ(U+301C)は個別に置換する。
     .replace(/[－−]/g, '-')
     .replace(/[～〜]/g, '~');
 }
@@ -869,6 +898,26 @@ if (require.main === module) {
     const normal = extractQuantities('周囲温度50 °Cで12.5 kW')[0];
     check('回帰防止: 通常の小数点付き数量(12.5 kW)は境界チェック追加後も正しく抽出される',
       !!normal);
+  }
+
+  // ── v2.11: 実データ検証で発見した全角単位の不具合、および新規単位追加の回帰テスト ──
+  {
+    check('全角英字単位(v2.11): 「２００Ｖ」が半角と同じく200Vの数量として抽出される',
+      extractQuantities('２００Ｖ')[0]?.quantity.lower.value === 200);
+    check('全角英字単位(v2.11): 全角の「３００ｍｍ以上」も修正後は300mmとして抽出される(mmは全角小文字でも認識)',
+      extractQuantities('呼び径は３００ｍｍ以上とする')[0]?.quantity.lower.value === 300);
+    const mpa = extractQuantities('40℃における貯蔵容器内圧力値4.4MPaとする')
+      .find(r => r.unit.canonical === 'MPa');
+    check('新規単位(v2.11): 「4.4MPa」がMPa(圧力)として抽出される', mpa && mpa.quantity.lower.value === 4.4);
+    const kva = extractQuantities('その電動機の出力１kW当たり4.8kVA未満にするもの')
+      .find(r => r.unit.canonical === 'kVA');
+    check('新規単位(v2.11): 「4.8kVA」がkVA(皮相電力)として抽出される(kWと誤認しない)',
+      kva && kva.quantity.upper.value === 4.8);
+    // A/Lは実データ検証で誤検出(鋼種型番SUS304L等との衝突)が確認されたため、意図的に
+    // 追加を見送っている。この意図的な非対応を回帰的に確認する(将来誤って追加され、
+    // 再び型番との衝突が起きることを防ぐ検出ではなく、少なくとも現状の非対応を記録する)。
+    check('単位辞書からの意図的な除外(v2.11): 「SUS304L」から数量304+Lを抽出しない(鋼種型番のため)',
+      extractQuantities('JISG4305によるSUS304L又はSUS316Lとする').length === 0);
   }
 
   assertions.forEach(a => console.log((a.pass ? '[OK] ' : '[FAIL] ') + a.name));
