@@ -48,6 +48,15 @@
 // (2) 節分割を要求側(A側)にも適用していたため、「電源電圧220V、50Hzとすること」のような
 // 複数数量が文末の共通述語を共有する要求文で、後半の述語が節分割により失われていた不具合。
 // 節分割を実仕様側(B側、条件節を除く)のみに限定して解決した。詳細は8.8〜8.13節を参照。
+//
+// v2.15承認後、レビュー推奨の「実文書コーパスでの誤昇格率実測」の代替として、実データを使わず
+// 大量の組み合わせで設計原則を機械的に検証する摂動テスト(interval_semantics_fuzz_test.js)を
+// 追加した(8.16節)。この延長で、肯定語辞書の語(実測/達成値/使用可能等)が、直後に否定表現
+// (「ではない」等)を伴う場合でも構文を無視して一致してしまう問題を、専用の摂動テスト
+// (vocabulary_negation_fuzz_test.js)で発見した。「実測ではない25℃」が確信度0.70で
+// achieved_pointとして自動適用の閾値を超えてしまうことを実際に確認し、v2.16で肯定語の
+// 直後に否定表現が続く場合は一致を無視する簡易的な否定スコープ検出(hasUnnegatedKeywordMatch())
+// を追加して対応した。詳細は8.17節を参照。
 
 const { extractQuantities, coverageGap, isGenuinePoint, isEmptyInterval } = require('./quantity_extraction_prototype.js');
 
@@ -77,6 +86,26 @@ const REQUIREMENT_SEMANTICS_RULES = [
   { value: 'acceptable_region', weight: 0.15, evidenceType: 'quantity_shape',
     match: (text, quantity) => isOneSidedLower(quantity) || isOneSidedUpper(quantity) || isGenuinePoint(quantity) },
 ];
+
+// v2.16: 肯定語(実測/達成値/使用可能等)の正規表現は、直後に否定表現が続く場合でも文字列として
+// 一致してしまう(「実測ではない25℃」の"実測"等)。摂動テストで、この場合でもachieved_pointが
+// 確信度0.70(構造0.3+肯定語0.4)に達し、auto_applicable閾値(0.4)を超えることを発見した
+// (vocabulary_negation_fuzz_test.js参照)。文全体の構文解析は行わず、肯定語の直後
+// (助詞等を挟まない直近)に否定表現が続く場合のみ、その一致を無視する簡易策で対応する。
+const NEGATION_SUFFIX_PATTERN = /^(?:ではな(?:い|く)|ではありません|ではございません|とは言えない)/;
+function hasUnnegatedKeywordMatch(text, keywordPattern) {
+  const flags = keywordPattern.flags.includes('g') ? keywordPattern.flags : keywordPattern.flags + 'g';
+  const globalPattern = new RegExp(keywordPattern.source, flags);
+  let m;
+  while ((m = globalPattern.exec(text))) {
+    const after = text.slice(m.index + m[0].length);
+    if (!NEGATION_SUFFIX_PATTERN.test(after)) return true;
+    if (m[0].length === 0) globalPattern.lastIndex++;
+  }
+  return false;
+}
+const ACHIEVED_POINT_KEYWORD_PATTERN = /実測|達成値|検討(?:の)?結果|測定した結果|試験(?:の)?結果|検査(?:の)?結果|実績値|成績値/;
+const CAPABILITY_KEYWORD_PATTERN = /使用可能|対応可能|運転可能/;
 
 // 実仕様側(Excel=B側、role='baseline_design'/'resolved_design')の意味候補。
 const ACTUAL_SEMANTICS_RULES = [
@@ -112,16 +141,16 @@ const ACTUAL_SEMANTICS_RULES = [
   // 「試験」「検査」「検討」いずれも(?:の)?を挟めるパターンへ統一した。
   { value: 'achieved_point', weight: 0.4, evidenceType: 'keyword',
     match: (text, quantity) => isGenuinePoint(quantity) &&
-      /実測|達成値|検討(?:の)?結果|測定した結果|試験(?:の)?結果|検査(?:の)?結果|実績値|成績値/.test(text) },
+      hasUnnegatedKeywordMatch(text, ACHIEVED_POINT_KEYWORD_PATTERN) },
   { value: 'capability_domain', weight: 0.55, evidenceType: 'keyword',
-    match: (text, quantity) => isTwoSidedRange(quantity) && /使用可能|対応可能|運転可能/.test(text) },
+    match: (text, quantity) => isTwoSidedRange(quantity) && hasUnnegatedKeywordMatch(text, CAPABILITY_KEYWORD_PATTERN) },
   { value: 'capability_domain', weight: 0.1, evidenceType: 'quantity_shape',
     match: (text, quantity) => isTwoSidedRange(quantity) },
   // 点であっても、能力キーワードが伴う場合はcapability_domainの可能性も残す
   // (「点だから自動的にachieved_pointにしない」というレビュー指摘への対応。
   //  例:「対応可能温度は25℃のみ」は達成値・能力領域のどちらの解釈もあり得る)
   { value: 'capability_domain', weight: 0.4, evidenceType: 'keyword',
-    match: (text, quantity) => isGenuinePoint(quantity) && /使用可能|対応可能|運転可能/.test(text) },
+    match: (text, quantity) => isGenuinePoint(quantity) && hasUnnegatedKeywordMatch(text, CAPABILITY_KEYWORD_PATTERN) },
   { value: 'outcome_range', weight: 0.6, evidenceType: 'keyword',
     match: (text) => text.includes('±') },
   { value: 'outcome_range', weight: 0.5, evidenceType: 'keyword',
@@ -1036,6 +1065,39 @@ if (require.main === module) {
       c220[0].value === 'acceptable_region' && Math.abs(c220[0].confidence - 0.45) < 1e-9);
     check('必須修正2(v2.15): 同じ要求文で50Hzも同じ確信度になる(要求側は節分割しないため、どちらも全文を参照する)',
       c50hz[0].value === 'acceptable_region' && Math.abs(c50hz[0].confidence - 0.45) < 1e-9);
+  }
+
+  // ── v2.16: 摂動テスト(vocabulary_negation_fuzz_test.js)で発見した必須修正の回帰テスト ──
+  // 「実測ではない25℃」のように、肯定語の直後に否定表現が続く場合、修正前は確信度0.70で
+  // achieved_pointが自動適用の閾値を超えてしまっていた(構文を無視した正規表現一致が原因)。
+  {
+    const negatedCases = [
+      { text: 'これは実測ではない25℃', label: '実測ではない' },
+      { text: '試験結果ではない25℃', label: '試験結果ではない' },
+      { text: '検討結果ではなく25℃', label: '検討結果ではなく' },
+      { text: '実測ではありません25℃', label: '実測ではありません' },
+    ];
+    negatedCases.forEach(({ text, label }) => {
+      const records = extractQuantities(text);
+      const target = records.find(r => text.endsWith(r.source_text)) || records[records.length - 1];
+      const c = generateIntervalSemanticsCandidates(target, { side: 'B', nearbyText: text });
+      check(`必須修正(v2.16): 「${label}」はachieved_pointが自動適用閾値(0.4)を超えない(実際: ${c[0].value} ${c[0].confidence.toFixed(2)})`,
+        !(c[0].value === 'achieved_point' && c[0].confidence >= 0.4));
+    });
+    // 能力キーワードも同じ否定スコープ検出を通す(使用可能/対応可能/運転可能)
+    const capText = '使用可能ではない0℃から50℃';
+    const capRecords = extractQuantities(capText);
+    const capTarget = capRecords.find(r => capText.endsWith(r.source_text)) || capRecords[capRecords.length - 1];
+    const capCandidates = generateIntervalSemanticsCandidates(capTarget, { side: 'B', nearbyText: capText });
+    check(`必須修正(v2.16): 「使用可能ではない0℃から50℃」はcapability_domainが自動適用閾値を超えない(実際: ${capCandidates[0].value} ${capCandidates[0].confidence.toFixed(2)})`,
+      !(capCandidates[0].value === 'capability_domain' && capCandidates[0].confidence >= 0.4));
+    // 否定を伴わない場合は、引き続き正しく肯定語として機能することを確認する(回帰防止)
+    const positiveText = '実測25℃';
+    const posRecords = extractQuantities(positiveText);
+    const posTarget = posRecords.find(r => positiveText.endsWith(r.source_text)) || posRecords[posRecords.length - 1];
+    const posCandidates = generateIntervalSemanticsCandidates(posTarget, { side: 'B', nearbyText: positiveText });
+    check('必須修正(v2.16・回帰防止): 否定を伴わない「実測25℃」は引き続きachieved_point:0.70になる',
+      posCandidates[0].value === 'achieved_point' && Math.abs(posCandidates[0].confidence - 0.70) < 1e-9);
   }
 
   assertions.forEach(a => console.log((a.pass ? '[OK] ' : '[FAIL] ') + a.name));
