@@ -57,6 +57,14 @@
 // achieved_pointとして自動適用の閾値を超えてしまうことを実際に確認し、v2.16で肯定語の
 // 直後に否定表現が続く場合は一致を無視する簡易的な否定スコープ検出(hasUnnegatedKeywordMatch())
 // を追加して対応した。詳細は8.17節を参照。
+//
+// v2.16の実データ検証(8.18〜8.19節)で、公開の政府調達仕様書コーパスに対しREQUIREMENT_SEMANTICS_
+// RULESのkeywordルールが一件も機能しないことが判明した。「〜とすること」のみに対応しており、
+// この文書で多用される「〜とする。」（「こと」を伴わない平叙文形）に一致しなかったためである。
+// v2.17では、JIS Z 8301:2019(規格票の様式及び作成方法)附属書が要求事項の標準的な表現として
+// 「…とする。」「…(し)なければならない。」を規定していることを確認し、この2つを追加した。
+// 同じ表に含まれる「…による。」は、実データ調査で「特記による」等の参照表現がほぼ全てであり
+// 数量そのものを規定しないため、意図的に追加を見送った。詳細は8.20節を参照。
 
 const { extractQuantities, coverageGap, isGenuinePoint, isEmptyInterval } = require('./quantity_extraction_prototype.js');
 
@@ -78,11 +86,21 @@ const REQUIREMENT_SEMANTICS_RULES = [
   { value: 'required_capability_domain', weight: 0.15, evidenceType: 'quantity_shape',
     match: (text, quantity) => isTwoSidedRange(quantity) },
   { value: 'acceptable_region', weight: 0.45, evidenceType: 'keyword',
-    match: (text) => /確保すること|以下とすること|以上とすること/.test(text) },
+    match: (text) => /確保する(?:こと)?|以下とする(?:こと)?|以上とする(?:こと)?/.test(text) },
+  // v2.17(8.20節): JIS Z 8301:2019(規格票の様式及び作成方法)附属書は、規格文書における
+  // 要求事項の標準的な表現として「…とする。」「…(し)なければならない。」を規定している
+  // （「…する。」「…による。」も同じ表に含まれるが、下記の理由で採用していない）。
+  // v2.16までは「〜とすること」（「こと」を伴う名詞化表現）のみに一致していたが、実データ
+  // 検証(8.18〜8.19節)で、政府調達仕様書ではこの「こと」を伴わない平叙文形「〜とする。」が
+  // 圧倒的多数(調査対象文書で355件、「とすること」はわずか2件)を占めることが判明したため、
+  // 「こと」を任意にし、あわせて「なければならない」も追加した。「〜する。」は動詞の終止形
+  // 一般と区別できず語彙として機能しないため採用せず、「〜による。」はJIS上は同じ要求事項の
+  // 表現に分類されるが、実データ調査で「特記による」「次による」のように他文書・他条項への
+  // 参照を表す用法がほぼ全て(20件サンプル中20件)であり、数量そのものを規定する表現ではない
+  // ため、意図的に追加を見送った。
   { value: 'acceptable_region', weight: 0.3, evidenceType: 'keyword',
-    // 「〜とすること」で終わる一般的な目標値表現(能力表現の語彙とは重複させない)
-    match: (text) => /とすること/.test(text) &&
-      !/確保すること|以下とすること|以上とすること|運転できること|使用できること|動作できること|対応できること/.test(text) },
+    match: (text) => /とする(?:こと)?|なければならない/.test(text) &&
+      !/確保する(?:こと)?|以下とする(?:こと)?|以上とする(?:こと)?|運転できること|使用できること|動作できること|対応できること/.test(text) },
   { value: 'acceptable_region', weight: 0.15, evidenceType: 'quantity_shape',
     match: (text, quantity) => isOneSidedLower(quantity) || isOneSidedUpper(quantity) || isGenuinePoint(quantity) },
 ];
@@ -1098,6 +1116,29 @@ if (require.main === module) {
     const posCandidates = generateIntervalSemanticsCandidates(posTarget, { side: 'B', nearbyText: positiveText });
     check('必須修正(v2.16・回帰防止): 否定を伴わない「実測25℃」は引き続きachieved_point:0.70になる',
       posCandidates[0].value === 'achieved_point' && Math.abs(posCandidates[0].confidence - 0.70) < 1e-9);
+  }
+
+  // ── v2.17: JIS Z 8301(規格票の様式及び作成方法)に準拠した要求事項語彙の拡張(8.20節) ──
+  {
+    const t1 = 'ナイロンコーティング鋼管の使用温度は60℃以下とする。';
+    const c1 = generateIntervalSemanticsCandidates(extractQuantities(t1)[0], { side: 'A', nearbyText: t1 });
+    check('語彙拡張(v2.17): 「〜以下とする。」(こと無し)がacceptable_regionの強い根拠(0.45)として機能する',
+      c1[0].value === 'acceptable_region' && Math.abs(c1[0].confidence - 0.60) < 1e-9);
+
+    const t2 = '工事完成後10日以内に登録申請を行わなければならない15kW。'; // 数量を人工的に含める(語彙検証専用)
+    const c2 = generateIntervalSemanticsCandidates(extractQuantities(t2)[0], { side: 'A', nearbyText: t2 });
+    check('語彙拡張(v2.17): 「〜なければならない。」もacceptable_regionの根拠として機能する',
+      c2[0].value === 'acceptable_region' && c2[0].evidence.some(e => e.type === 'keyword'));
+
+    const t3 = '施工条件は特記による15kW。'; // 「による」は意図的に語彙へ加えていないことの確認
+    const c3 = generateIntervalSemanticsCandidates(extractQuantities(t3)[0], { side: 'A', nearbyText: t3 });
+    check('語彙拡張(v2.17): 「〜による。」は意図的に未対応のまま(参照表現であり値を規定しないため、根拠にならない)',
+      !c3[0].evidence.some(e => e.type === 'keyword'));
+
+    const t4 = '定格電源は三相AC 220 V、50 Hzとすること。'; // v2.15の既存回帰: 「とすること」は従来どおり0.45
+    const c4v = generateIntervalSemanticsCandidates(extractQuantities(t4)[0], { side: 'A', nearbyText: t4 });
+    check('回帰防止(v2.17): 既存の「〜とすること」(こと有り)は引き続き同じ確信度で機能する(二重加点しない)',
+      Math.abs(c4v[0].confidence - 0.45) < 1e-9);
   }
 
   assertions.forEach(a => console.log((a.pass ? '[OK] ' : '[FAIL] ') + a.name));

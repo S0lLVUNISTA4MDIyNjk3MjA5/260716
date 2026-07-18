@@ -94,15 +94,17 @@ if (require.main === module) {
   const failCount = assertions.filter(a => !a.pass).length;
   console.log(`\n合計 ${assertions.length}件中 ${assertions.length - failCount}件成功 / ${failCount}件失敗`);
 
-  console.log('\n【残された限界(この検証で判明。詳細はsemantic_mapping_prototype.md 8.18〜8.19節)】');
+  console.log('\n【残された限界(この検証で判明。詳細はsemantic_mapping_prototype.md 8.18〜8.20節)】');
   console.log('1. 単位辞書のカバー範囲: この文書全体で数値+単位を含む文は112件見つかった。工程4aが対応する');
   console.log('   単位(℃/kW/V/Hz/dB(A)/mm/MPa/kPa/Pa/kVA)のいずれかを含むのは106件(約95%)。mmが元々');
   console.log('   対応していたため大半をカバーしていたが、A(アンペア)・L(リットル)は鋼種型番(SUS304L等)と');
   console.log('   衝突する誤検出が実データで確認されたため追加を見送っており、その分は依然未対応。');
-  console.log('2. 要求側キーワード語彙のカバー範囲: REQUIREMENT_SEMANTICS_RULESの「とすること」パターンは、');
-  console.log('   この文書で頻出する平叙文形の「とする」（「〜とすること」ではなく「〜とする。」）に一致');
-  console.log('   しないため、A側候補は全件が構造的根拠のみ(確信度0.15)に留まった。詳細は');
-  console.log('   semantic_mapping_prototype.md 8.18節を参照。');
+  console.log(`2. 要求側キーワード語彙のカバー範囲: v2.17でJIS Z 8301(規格票の様式及び作成方法)の要求事項`);
+  console.log('   表現(「とする」「なければならない」)へ対応した結果、A側候補のうちkeyword由来の根拠が');
+  console.log(`   最上位候補に寄与した件数は ${r.requirementKeywordHits}/${r.totalQuantities}件まで改善した(拡張前は0件)。`);
+  console.log('   「による」は参照表現(「特記による」等)がほぼ全てであり値を規定しないため、意図的に');
+  console.log('   未対応のまま。「望ましい」(推奨事項)・「してもよい」(許容事項)も、要求の強さが');
+  console.log('   「とする」とは異なるため、意図的に未対応のまま残している。詳細は8.20節を参照。');
 }
 
 module.exports = { runValidation, corpus };
