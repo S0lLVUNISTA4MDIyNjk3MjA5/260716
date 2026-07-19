@@ -1,14 +1,23 @@
 {
   "schema_version": "trace-comparison/1.0-rc1",
-  "generated_at": "2026-07-19T09:07:55.430Z",
-  "note": "trace_comparison_example_verification.jsにより実データ(samples/hvac_trace_sample_small/)から機械的に生成・検証済み。手打ちの値は含まない。",
+  "generated_at": "2026-07-19T09:22:21.233Z",
+  "note": "trace_comparison_example_verification.jsにより実データ(samples/hvac_trace_sample_small/)から機械的に生成・検証済み。relationshipもruntime_fixtures/*.jsonから機械的に解決した(手打ちの値は含まない)。",
   "source": {
     "requirement_file": "JSON_A_customer_requirements_trace.json",
     "actual_file": "JSON_B_design_review_trace.json"
   },
+  "provenance": {
+    "hash_algorithm": "SHA-256",
+    "id_hash_algorithm": "SHA-256/128",
+    "normalization": "v12Normalize相当(NFKC正規化+改行統一+行末空白除去+空白圧縮+trim)",
+    "requirement_dataset_signature": null,
+    "actual_dataset_signature": null,
+    "matching_dataset_signature": "DS:4b6ad0e9:A4:B5"
+  },
+  "not_analyzed": [],
   "comparisons": [
     {
-      "comparison_id": "req-cooling-capacity::design-cooling-capacity::q-be1c0825cbf56b0f::q-017849d7273ef6a1",
+      "comparison_id": "req-cooling-capacity::design-cooling-capacity::q-ed9e1b0e2bb3730660a560292ea1b509::q-cb3dc528de8f7e9ac48943439046f69f",
       "requirement_ref": {
         "trace_id": "req-cooling-capacity",
         "matcher_id": "req-cooling-capacity"
@@ -18,7 +27,7 @@
         "matcher_id": "6",
         "source_row": 6
       },
-      "quantity_pair_id": "q-be1c0825cbf56b0f::q-017849d7273ef6a1",
+      "quantity_pair_id": "q-ed9e1b0e2bb3730660a560292ea1b509::q-cb3dc528de8f7e9ac48943439046f69f",
       "relationship": {
         "source": "matching_engine",
         "match_method": "tag",
@@ -27,14 +36,14 @@
         "linked_at": null
       },
       "requirement_analysis": {
-        "quantity_id": "q-be1c0825cbf56b0f",
+        "quantity_id": "q-ed9e1b0e2bb3730660a560292ea1b509",
         "source_field": "source_raw_text",
         "occurrence_index": 0,
         "source_span": {
           "start": 18,
           "end": 23
         },
-        "content_hash": "92e148aaaf322f2d",
+        "content_hash": "7a48895380cb969ebc07b77c7bad7482e74429c0256d587f6f422c9318d82582",
         "quantity": {
           "source_text": "12 kW",
           "source_span": {
@@ -137,14 +146,14 @@
         ]
       },
       "actual_analysis": {
-        "quantity_id": "q-017849d7273ef6a1",
+        "quantity_id": "q-cb3dc528de8f7e9ac48943439046f69f",
         "source_field": "検討結果",
         "occurrence_index": 0,
         "source_span": {
           "start": 10,
           "end": 17
         },
-        "content_hash": "f9e2561cc644c598",
+        "content_hash": "4adc55e65116472a82c265a8d68d4485fa0c57b2572d77744374441cadc66450",
         "quantity": {
           "source_text": "12.5 kW",
           "source_span": {
@@ -327,13 +336,41 @@
         "extractionWarnings": []
       },
       "review": {
-        "status": "unreviewed",
-        "confirmed": false,
-        "confirmed_targets": [],
-        "reviewer": null,
-        "reviewed_at": null,
-        "verdict": null,
-        "note": null
+        "quantity_extraction": {
+          "status": "unreviewed",
+          "reviewer": null,
+          "reviewed_at": null,
+          "verdict": null,
+          "note": null
+        },
+        "property_mapping": {
+          "status": "unreviewed",
+          "reviewer": null,
+          "reviewed_at": null,
+          "verdict": null,
+          "note": null
+        },
+        "condition_equivalence": {
+          "status": "unreviewed",
+          "reviewer": null,
+          "reviewed_at": null,
+          "verdict": null,
+          "note": null
+        },
+        "comparison_mode": {
+          "status": "unreviewed",
+          "reviewer": null,
+          "reviewed_at": null,
+          "verdict": null,
+          "note": null
+        },
+        "satisfaction": {
+          "status": "not_eligible",
+          "reviewer": null,
+          "reviewed_at": null,
+          "verdict": null,
+          "note": null
+        }
       }
     }
   ]
