@@ -15,7 +15,6 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { execSync } = require('child_process');
 
 const REPO = path.join(__dirname, '..', '..');
 const TOOL_PATH = path.join(REPO, 'tools/spec_to_json_conversion_tool_v1.18.html');
@@ -31,6 +30,14 @@ function nodeV12HashParts(namespace, parts) {
   const canonical = [namespace, ...parts.map(v12NormalizeEquivalent)].join(NUL);
   return crypto.createHash('sha256').update(canonical, 'utf-8').digest('hex');
 }
+// gitコマンドに依存せず、git blobオブジェクトのハッシュ("blob <byte数>\0<内容>"のSHA-1)を
+// Node組み込みモジュールだけで計算する(レビュー指摘: execSync('git hash-object')だとgitが
+// 使えない環境で陳腐化検査そのものがスキップされてしまうため、必須検査にできるよう変更)。
+function gitBlobSha(filePath) {
+  const content = fs.readFileSync(filePath);
+  const header = Buffer.from('blob ' + content.length + String.fromCharCode(0), 'utf-8');
+  return crypto.createHash('sha1').update(Buffer.concat([header, content])).digest('hex');
+}
 
 const assertions = [];
 const check = (name, cond) => assertions.push({ name, pass: !!cond });
@@ -39,17 +46,7 @@ const fixture = JSON.parse(fs.readFileSync(FIXTURE_PATH, 'utf-8'));
 
 check(`3経路検証fixtureに記録されたsource_blob_sha(${fixture.source_blob_sha.slice(0, 12)}...)が、` +
   `現在の${fixture.source_file}のgit blobハッシュと一致する(不一致ならhash_3paths_verification.jsの再実行が必要)`,
-  (() => {
-    try {
-      const current = execSync(`git hash-object "${TOOL_PATH}"`, { cwd: REPO }).toString().trim();
-      return current === fixture.source_blob_sha;
-    } catch (e) {
-      // gitが使えない/ファイルが見つからない等の環境では判定できないため、
-      // 「不明」を失敗扱いにはしない(このスクリプト自体の可搬性を優先する)。
-      console.log('  [注記] git hash-object を実行できなかったため、source_blob_shaの照合はスキップした:', String(e.message || e));
-      return true;
-    }
-  })());
+  gitBlobSha(TOOL_PATH) === fixture.source_blob_sha);
 
 for (const c of fixture.comparison) {
   const recomputed = nodeV12HashParts(c.namespace, c.parts);

@@ -17,7 +17,6 @@ const { chromium } = require('playwright');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
-const { execSync } = require('child_process');
 
 const REPO = path.join(__dirname, '..', '..');
 const TOOL = path.join(REPO, 'tools/spec_to_json_conversion_tool_v1.18.html');
@@ -52,6 +51,13 @@ function nodeV12HashParts(namespace, parts) {
   const NUL = String.fromCharCode(0);
   const canonical = [namespace, ...parts.map(v12NormalizeEquivalent)].join(NUL);
   return crypto.createHash('sha256').update(canonical, 'utf-8').digest('hex');
+}
+// gitコマンドに依存せず、git blobオブジェクトのハッシュをNode組み込みモジュールだけで計算する
+// (hash_3paths_node_check.jsと同じ実装。git CLIが使えない環境でも動くようにする)。
+function gitBlobSha(filePath) {
+  const content = fs.readFileSync(filePath);
+  const header = Buffer.from('blob ' + content.length + String.fromCharCode(0), 'utf-8');
+  return crypto.createHash('sha1').update(Buffer.concat([header, content])).digest('hex');
 }
 
 async function runInBrowser(disableSubtle) {
@@ -107,7 +113,7 @@ async function runInBrowser(disableSubtle) {
   console.log('');
   console.log(allMatch ? '3経路すべて一致' : '不一致あり(詳細はresults参照)');
 
-  const sourceBlobSha = execSync(`git hash-object "${TOOL}"`, { cwd: REPO }).toString().trim();
+  const sourceBlobSha = gitBlobSha(TOOL);
   fs.mkdirSync(path.dirname(OUT_PATH), { recursive: true });
   fs.writeFileSync(OUT_PATH, JSON.stringify({
     source_file: 'tools/spec_to_json_conversion_tool_v1.18.html',
