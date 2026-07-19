@@ -1,0 +1,122 @@
+[
+  {
+    "trapSize": 0,
+    "plmCount": 5,
+    "firstPlmKeys": [
+      "trace_id",
+      "parent_id",
+      "trace_title",
+      "trace_text",
+      "trace_content",
+      "trace_category",
+      "trace_key_text",
+      "source_file",
+      "source_sheet",
+      "source_row",
+      "source_path",
+      "source_section_id",
+      "source_section_title",
+      "block_type",
+      "review_status",
+      "tags",
+      "unregistered_tags",
+      "source_record",
+      "_plmRowId"
+    ],
+    "selectedTrap": false
+  },
+  {
+    "trapSize": 4,
+    "plmCount": 5,
+    "firstPlmKeys": [
+      "trace_id",
+      "parent_id",
+      "trace_title",
+      "trace_text",
+      "trace_content",
+      "trace_category",
+      "trace_key_text",
+      "source_file",
+      "source_sheet",
+      "source_row",
+      "source_path",
+      "source_section_id",
+      "source_section_title",
+      "block_type",
+      "review_status",
+      "tags",
+      "unregistered_tags",
+      "source_record",
+      "nested_array_trap",
+      "_plmRowId"
+    ],
+    "selectedTrap": false
+  },
+  {
+    "trapSize": 5,
+    "plmCount": 5,
+    "firstPlmKeys": [
+      "trace_id",
+      "parent_id",
+      "trace_title",
+      "trace_text",
+      "trace_content",
+      "trace_category",
+      "trace_key_text",
+      "source_file",
+      "source_sheet",
+      "source_row",
+      "source_path",
+      "source_section_id",
+      "source_section_title",
+      "block_type",
+      "review_status",
+      "tags",
+      "unregistered_tags",
+      "source_record",
+      "nested_array_trap",
+      "_plmRowId"
+    ],
+    "selectedTrap": false
+  },
+  {
+    "trapSize": 6,
+    "plmCount": 6,
+    "firstPlmKeys": [
+      "i",
+      "junk",
+      "_plmRowId"
+    ],
+    "selectedTrap": true
+  },
+  {
+    "trapSize": 10,
+    "plmCount": 10,
+    "firstPlmKeys": [
+      "i",
+      "junk",
+      "_plmRowId"
+    ],
+    "selectedTrap": true
+  },
+  {
+    "trapSize": 50,
+    "plmCount": 50,
+    "firstPlmKeys": [
+      "i",
+      "junk",
+      "_plmRowId"
+    ],
+    "selectedTrap": true
+  },
+  {
+    "trapSize": 200,
+    "plmCount": 200,
+    "firstPlmKeys": [
+      "i",
+      "junk",
+      "_plmRowId"
+    ],
+    "selectedTrap": true
+  }
+]

@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 2,
+  "tool": "V12.1.15 Review Learning",
+  "exportedAt": "2026-07-19T04:51:22.162Z",
+  "profile": "generic",
+  "reviews": {},
+  "manualRelations": {},
+  "replacements": [],
+  "trainingFeedback": {},
+  "traceSnapshot": {
+    "tool": "V11.9 Trace Profile IO",
+    "profile": "generic",
+    "created_at": "2026-07-19T04:51:22.162Z",
+    "pairs": {
+      "generic||req-use-temperature||5": {
+        "A_ID": "req-use-temperature",
+        "B_ID": "5",
+        "A_表示名": "空調ユニットは、周囲温度0 °Cから50 °Cの環境で正常に運転できること。",
+        "B_表示名": "使用温度範囲",
+        "分類": "要確認",
+        "方式": "tag",
+        "信頼度": 0.88,
+        "根拠": "A→B / 使用温度 ／ タグ一致: 使用温度 (共有1 / A1 / B1, Dice 1.00)"
+      },
+      "generic||req-use-temperature||8": {
+        "A_ID": "req-use-temperature",
+        "B_ID": "8",
+        "A_表示名": "空調ユニットは、周囲温度0 °Cから50 °Cの環境で正常に運転できること。",
+        "B_表示名": "運転騒音",
+        "分類": "要確認",
+        "方式": "vector",
+        "信頼度": 0.8,
+        "根拠": "trace_text→trace_title / 運転"
+      },
+      "generic||req-cooling-capacity||6": {
+        "A_ID": "req-cooling-capacity",
+        "B_ID": "6",
+        "A_表示名": "周囲温度50 °Cにおいて、冷房能力12 kW以上を確保すること。",
+        "B_表示名": "冷房能力",
+        "分類": "要確認",
+        "方式": "tag",
+        "信頼度": 0.88,
+        "根拠": "A→B / 使用温度, 冷房能力 ／ タグ一致: 使用温度, 冷房能力 (共有2 / A2 / B2, Dice 1.00)"
+      },
+      "generic||req-power-supply||7": {
+        "A_ID": "req-power-supply",
+        "B_ID": "7",
+        "A_表示名": "定格電源は三相AC 220 V、50 Hzとすること。",
+        "B_表示名": "電源電圧・周波数",
+        "分類": "要確認",
+        "方式": "tag",
+        "信頼度": 0.88,
+        "根拠": "A→B / 周波数, 電源電圧 ／ タグ一致: 周波数, 電源電圧 (共有2 / A2 / B2, Dice 1.00)"
+      },
+      "generic||req-noise||8": {
+        "A_ID": "req-noise",
+        "B_ID": "8",
+        "A_表示名": "定格運転時の装置正面1 mにおける騒音値は60 dB(A)以下とすること。",
+        "B_表示名": "運転騒音",
+        "分類": "要確認",
+        "方式": "tag",
+        "信頼度": 0.88,
+        "根拠": "A→B / 騒音 ／ タグ一致: 騒音 (共有1 / A1 / B1, Dice 1.00)"
+      },
+      "generic||||9": {
+        "A_ID": "",
+        "B_ID": "9",
+        "A_表示名": "",
+        "B_表示名": "保守作業スペース",
+        "分類": "B未参照",
+        "方式": "",
+        "信頼度": "",
+        "根拠": "有効なA側関係なし"
+      }
+    }
+  },
+  "resultMode": "effective",
+  "mlFeatureVersion": "ml-features-v1",
+  "datasetSignature": "DS:4b6ad0e9:A4:B5",
+  "overviewScopeDecisions": {
+    "schemaVersion": 2,
+    "datasetFingerprint": "DS:8b70bac5:A4:B5",
+    "groupingSignature": "GRP:f0033488:GA4:GB1",
+    "decisions": {}
+  },
+  "phase7Version": "12.1.15-column-order"
+}

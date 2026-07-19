@@ -1,0 +1,409 @@
+{
+  "graph_name": "trace_graph",
+  "graph_id": "KG-1784436678044",
+  "created_at": "2026-07-19T04:51:18.044Z",
+  "metadata": {
+    "plmCount": 5,
+    "sysCount": 4,
+    "inputAdapters": {
+      "plm": {
+        "used": false,
+        "kind": "",
+        "count": 0
+      },
+      "sys": {
+        "used": false,
+        "kind": "",
+        "count": 0
+      }
+    },
+    "traceProfile": "汎用JSON（JSON A ↔ JSON B）",
+    "traceProfileId": "generic",
+    "matchStatus": "matched",
+    "annotation": {
+      "generatedAt": "2026-07-19T04:51:18.116Z",
+      "annotationMs": 24.900000000023283,
+      "highFrequencyTags": [],
+      "stats": {
+        "aRows": 4,
+        "bRows": 5,
+        "aTagged": 4,
+        "bTagged": 5,
+        "codeTags": 0,
+        "dictTags": 0,
+        "explicitTags": 13,
+        "manualTags": 0,
+        "aEffectiveTagged": 0,
+        "bEffectiveTagged": 0,
+        "highFrequencyExcludedRatio": 0
+      },
+      "useForMatching": true
+    },
+    "performanceTiming": {
+      "annotationMs": 0,
+      "indexBuildMs": 0.20000000001164153,
+      "candidateAndMatchMs": 43.5,
+      "resultBuildMs": 4.099999999976717,
+      "totalRunMs": 50.29999999998836,
+      "tagMatching": {
+        "collect": false,
+        "aRows": 4,
+        "totalCandidates": 20,
+        "codeCandidates": 0,
+        "tagCandidates": 6,
+        "fuzzyCandidates": 14,
+        "fuzzySkipped": 6,
+        "candidateReductionRate": 0
+      },
+      "measuredAt": "2026-07-19T04:51:18.170Z",
+      "environment": "browser"
+    },
+    "tagMatching": {
+      "settings": {
+        "enabled": true,
+        "matchingMode": "auto",
+        "autoResolved": true,
+        "autoReason": "A/B双方で明示タグを検出（A 4行、B 5行）",
+        "explicitTagRowsA": 4,
+        "explicitTagRowsB": 5,
+        "useForMatching": true,
+        "skipFuzzySimilarityThreshold": 0.6,
+        "maxTagsPerRow": 16,
+        "highFrequencyRatio": 0.2,
+        "dictSource": "manual"
+      },
+      "highFrequencyTags": [],
+      "stats": {
+        "aRows": 4,
+        "bRows": 5,
+        "aTagged": 4,
+        "bTagged": 5,
+        "codeTags": 0,
+        "dictTags": 0,
+        "explicitTags": 13,
+        "manualTags": 0,
+        "aEffectiveTagged": 4,
+        "bEffectiveTagged": 5,
+        "highFrequencyExcludedRatio": 0,
+        "aEffectiveRate": 1,
+        "bEffectiveRate": 1
+      },
+      "matchStats": {
+        "collect": false,
+        "aRows": 4,
+        "totalCandidates": 20,
+        "codeCandidates": 0,
+        "tagCandidates": 6,
+        "fuzzyCandidates": 14,
+        "fuzzySkipped": 6,
+        "candidateReductionRate": 0
+      }
+    }
+  },
+  "nodes": [],
+  "edges": [],
+  "sysml_text": "",
+  "sysList": [
+    {
+      "trace_id": "req-use-temperature",
+      "parent_id": "sec-2-1",
+      "trace_title": "使用環境",
+      "trace_text": "空調ユニットは、周囲温度0 °Cから50 °Cの環境で正常に運転できること。",
+      "trace_content": [
+        "空調ユニットは、周囲温度0 °Cから50 °Cの環境で正常に運転できること。"
+      ],
+      "trace_category": "text",
+      "trace_key_text": "要求仕様 2.1 使用環境 周囲温度 0 °C 50 °C 正常運転",
+      "chapter_number": "第2章",
+      "chapter_title": "要求仕様",
+      "section_number": "2.1",
+      "section_title": "使用環境",
+      "block_type": "text",
+      "source_file": "customer_hvac_requirements.pdf",
+      "source_page": 2,
+      "source_path": "$.sections[0].content[0]",
+      "source_kind": "section_text",
+      "source_section_id": "sec-2-1",
+      "source_section_title": "使用環境",
+      "source_block_id": "block-2-1-1",
+      "source_raw_text": "空調ユニットは、周囲温度0 °Cから50 °Cの環境で正常に運転できること。",
+      "review_status": "reviewed",
+      "tags": [
+        "使用温度"
+      ],
+      "unregistered_tags": [],
+      "_sysRowId": "SYS-1"
+    },
+    {
+      "trace_id": "req-cooling-capacity",
+      "parent_id": "sec-2-2",
+      "trace_title": "冷房性能",
+      "trace_text": "周囲温度50 °Cにおいて、冷房能力12 kW以上を確保すること。",
+      "trace_content": [
+        "周囲温度50 °Cにおいて、冷房能力12 kW以上を確保すること。"
+      ],
+      "trace_category": "text",
+      "trace_key_text": "要求仕様 2.2 冷房性能 周囲温度 50 °C 冷房能力 12 kW以上",
+      "chapter_number": "第2章",
+      "chapter_title": "要求仕様",
+      "section_number": "2.2",
+      "section_title": "冷房性能",
+      "block_type": "text",
+      "source_file": "customer_hvac_requirements.pdf",
+      "source_page": 2,
+      "source_path": "$.sections[1].content[0]",
+      "source_kind": "section_text",
+      "source_section_id": "sec-2-2",
+      "source_section_title": "冷房性能",
+      "source_block_id": "block-2-2-1",
+      "source_raw_text": "周囲温度50 °Cにおいて、冷房能力12 kW以上を確保すること。",
+      "review_status": "reviewed",
+      "tags": [
+        "冷房能力",
+        "使用温度"
+      ],
+      "unregistered_tags": [],
+      "_sysRowId": "SYS-2"
+    },
+    {
+      "trace_id": "req-power-supply",
+      "parent_id": "sec-2-3",
+      "trace_title": "電源仕様",
+      "trace_text": "定格電源は三相AC 220 V、50 Hzとすること。",
+      "trace_content": [
+        "定格電源は三相AC 220 V、50 Hzとすること。"
+      ],
+      "trace_category": "text",
+      "trace_key_text": "要求仕様 2.3 電源仕様 三相 AC 220 V 50 Hz",
+      "chapter_number": "第2章",
+      "chapter_title": "要求仕様",
+      "section_number": "2.3",
+      "section_title": "電源仕様",
+      "block_type": "text",
+      "source_file": "customer_hvac_requirements.pdf",
+      "source_page": 2,
+      "source_path": "$.sections[2].content[0]",
+      "source_kind": "section_text",
+      "source_section_id": "sec-2-3",
+      "source_section_title": "電源仕様",
+      "source_block_id": "block-2-3-1",
+      "source_raw_text": "定格電源は三相AC 220 V、50 Hzとすること。",
+      "review_status": "reviewed",
+      "tags": [
+        "電源電圧",
+        "周波数"
+      ],
+      "unregistered_tags": [],
+      "_sysRowId": "SYS-3"
+    },
+    {
+      "trace_id": "req-noise",
+      "parent_id": "sec-2-4",
+      "trace_title": "騒音",
+      "trace_text": "定格運転時の装置正面1 mにおける騒音値は60 dB(A)以下とすること。",
+      "trace_content": [
+        "定格運転時の装置正面1 mにおける騒音値は60 dB(A)以下とすること。"
+      ],
+      "trace_category": "text",
+      "trace_key_text": "要求仕様 2.4 騒音 定格運転 装置正面 1 m 60 dB(A)以下",
+      "chapter_number": "第2章",
+      "chapter_title": "要求仕様",
+      "section_number": "2.4",
+      "section_title": "騒音",
+      "block_type": "text",
+      "source_file": "customer_hvac_requirements.pdf",
+      "source_page": 2,
+      "source_path": "$.sections[3].content[0]",
+      "source_kind": "section_text",
+      "source_section_id": "sec-2-4",
+      "source_section_title": "騒音",
+      "source_block_id": "block-2-4-1",
+      "source_raw_text": "定格運転時の装置正面1 mにおける騒音値は60 dB(A)以下とすること。",
+      "review_status": "reviewed",
+      "tags": [
+        "騒音"
+      ],
+      "unregistered_tags": [],
+      "_sysRowId": "SYS-4"
+    }
+  ],
+  "plmList": [
+    {
+      "trace_id": "design-use-temperature",
+      "parent_id": "sheet-design-review",
+      "trace_title": "使用温度範囲",
+      "trace_text": "使用温度範囲 / 0 °C～40 °C / 高温側の使用限界を50 °Cまで拡張する。 / 0 °C～50 °Cで使用可能",
+      "trace_content": [
+        "使用温度範囲 / 0 °C～40 °C / 高温側の使用限界を50 °Cまで拡張する。 / 0 °C～50 °Cで使用可能"
+      ],
+      "trace_category": "環境",
+      "trace_key_text": "設計検討表 環境 使用温度範囲 0 °C 50 °C 使用可能",
+      "source_file": "design_review_matrix.xlsx",
+      "source_sheet": "設計検討表",
+      "source_row": 5,
+      "source_path": "$._trace_records[0]",
+      "source_section_id": "sheet-design-review",
+      "source_section_title": "設計検討表",
+      "block_type": "excel_row",
+      "review_status": "reviewed",
+      "tags": [
+        "使用温度"
+      ],
+      "unregistered_tags": [],
+      "source_record": {
+        "分類": "環境",
+        "設計項目": "使用温度範囲",
+        "標準機種情報": "0 °C～40 °C",
+        "顧客対応・検討内容": "高温側の使用限界を50 °Cまで拡張する。",
+        "検討結果": "0 °C～50 °Cで使用可能",
+        "根拠・備考": "圧縮機・ファン・制御部品の定格を確認済み。",
+        "照合タグ": "使用温度",
+        "確認状態": "確認済み"
+      },
+      "quantity_analysis": {
+        "probe": "quantity_analysis_survives_v1",
+        "value": 12.5,
+        "unit": "kW"
+      },
+      "_plmRowId": "B-1"
+    },
+    {
+      "trace_id": "design-cooling-capacity",
+      "parent_id": "sheet-design-review",
+      "trace_title": "冷房能力",
+      "trace_text": "冷房能力 / 周囲温度40 °Cで10 kW / 高温環境における能力低下を考慮し、熱交換器を大型化する。 / 周囲温度50 °Cで12.5 kW",
+      "trace_content": [
+        "冷房能力 / 周囲温度40 °Cで10 kW / 高温環境における能力低下を考慮し、熱交換器を大型化する。 / 周囲温度50 °Cで12.5 kW"
+      ],
+      "trace_category": "性能",
+      "trace_key_text": "設計検討表 性能 冷房能力 周囲温度 50 °C 12.5 kW",
+      "source_file": "design_review_matrix.xlsx",
+      "source_sheet": "設計検討表",
+      "source_row": 6,
+      "source_path": "$._trace_records[1]",
+      "source_section_id": "sheet-design-review",
+      "source_section_title": "設計検討表",
+      "block_type": "excel_row",
+      "review_status": "reviewed",
+      "tags": [
+        "冷房能力",
+        "使用温度"
+      ],
+      "unregistered_tags": [],
+      "source_record": {
+        "分類": "性能",
+        "設計項目": "冷房能力",
+        "標準機種情報": "周囲温度40 °Cで10 kW",
+        "顧客対応・検討内容": "高温環境における能力低下を考慮し、熱交換器を大型化する。",
+        "検討結果": "周囲温度50 °Cで12.5 kW",
+        "根拠・備考": "熱負荷計算書 CHV-CAL-001による。",
+        "照合タグ": "冷房能力, 使用温度",
+        "確認状態": "確認済み"
+      },
+      "_plmRowId": "B-2"
+    },
+    {
+      "trace_id": "design-power-supply",
+      "parent_id": "sheet-design-review",
+      "trace_title": "電源電圧・周波数",
+      "trace_text": "電源電圧・周波数 / 三相AC 200 V、50/60 Hz / 顧客設備の電源条件に合わせて電源部品を変更する。 / 三相AC 220 V、50 Hzに対応",
+      "trace_content": [
+        "電源電圧・周波数 / 三相AC 200 V、50/60 Hz / 顧客設備の電源条件に合わせて電源部品を変更する。 / 三相AC 220 V、50 Hzに対応"
+      ],
+      "trace_category": "電気",
+      "trace_key_text": "設計検討表 電気 電源電圧 周波数 三相 AC 220 V 50 Hz",
+      "source_file": "design_review_matrix.xlsx",
+      "source_sheet": "設計検討表",
+      "source_row": 7,
+      "source_path": "$._trace_records[2]",
+      "source_section_id": "sheet-design-review",
+      "source_section_title": "設計検討表",
+      "block_type": "excel_row",
+      "review_status": "reviewed",
+      "tags": [
+        "電源電圧",
+        "周波数"
+      ],
+      "unregistered_tags": [],
+      "source_record": {
+        "分類": "電気",
+        "設計項目": "電源電圧・周波数",
+        "標準機種情報": "三相AC 200 V、50/60 Hz",
+        "顧客対応・検討内容": "顧客設備の電源条件に合わせて電源部品を変更する。",
+        "検討結果": "三相AC 220 V、50 Hzに対応",
+        "根拠・備考": "変圧器・接触器・保護機器の定格を確認済み。",
+        "照合タグ": "電源電圧, 周波数",
+        "確認状態": "確認済み"
+      },
+      "_plmRowId": "B-3"
+    },
+    {
+      "trace_id": "design-noise",
+      "parent_id": "sheet-design-review",
+      "trace_title": "運転騒音",
+      "trace_text": "運転騒音 / 装置正面1 mで65 dB(A) / 低騒音ファンと防振支持を採用する。 / 定格運転時、装置正面1 mで58 dB(A)",
+      "trace_content": [
+        "運転騒音 / 装置正面1 mで65 dB(A) / 低騒音ファンと防振支持を採用する。 / 定格運転時、装置正面1 mで58 dB(A)"
+      ],
+      "trace_category": "騒音",
+      "trace_key_text": "設計検討表 騒音 定格運転 装置正面 1 m 58 dB(A)",
+      "source_file": "design_review_matrix.xlsx",
+      "source_sheet": "設計検討表",
+      "source_row": 8,
+      "source_path": "$._trace_records[3]",
+      "source_section_id": "sheet-design-review",
+      "source_section_title": "設計検討表",
+      "block_type": "excel_row",
+      "review_status": "needs_review",
+      "tags": [
+        "騒音"
+      ],
+      "unregistered_tags": [],
+      "source_record": {
+        "分類": "騒音",
+        "設計項目": "運転騒音",
+        "標準機種情報": "装置正面1 mで65 dB(A)",
+        "顧客対応・検討内容": "低騒音ファンと防振支持を採用する。",
+        "検討結果": "定格運転時、装置正面1 mで58 dB(A)",
+        "根拠・備考": "試作機測定値。正式試験で再確認する。",
+        "照合タグ": "騒音",
+        "確認状態": "要確認"
+      },
+      "_plmRowId": "B-4"
+    },
+    {
+      "trace_id": "design-maintenance-space",
+      "parent_id": "sheet-design-review",
+      "trace_title": "保守作業スペース",
+      "trace_text": "保守作業スペース / 前面600 mm / 標準機種と同じ保守スペースを確保する。 / 前面600 mmを確保",
+      "trace_content": [
+        "保守作業スペース / 前面600 mm / 標準機種と同じ保守スペースを確保する。 / 前面600 mmを確保"
+      ],
+      "trace_category": "保守",
+      "trace_key_text": "設計検討表 保守 保守作業スペース 前面 600 mm",
+      "source_file": "design_review_matrix.xlsx",
+      "source_sheet": "設計検討表",
+      "source_row": 9,
+      "source_path": "$._trace_records[4]",
+      "source_section_id": "sheet-design-review",
+      "source_section_title": "設計検討表",
+      "block_type": "excel_row",
+      "review_status": "reviewed",
+      "tags": [
+        "保守性"
+      ],
+      "unregistered_tags": [],
+      "source_record": {
+        "分類": "保守",
+        "設計項目": "保守作業スペース",
+        "標準機種情報": "前面600 mm",
+        "顧客対応・検討内容": "標準機種と同じ保守スペースを確保する。",
+        "検討結果": "前面600 mmを確保",
+        "根拠・備考": "据付図 CHV-DWG-010参照。",
+        "照合タグ": "保守性",
+        "確認状態": "確認済み"
+      },
+      "_plmRowId": "B-5"
+    }
+  ]
+}

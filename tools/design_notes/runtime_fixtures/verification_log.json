@@ -1,0 +1,222 @@
+[
+  {
+    "label": "loadBtn.disabled after file select",
+    "value": false
+  },
+  {
+    "label": "post-match state",
+    "value": {
+      "hasMergedResult": true,
+      "downloadJsonBtnDisabled": true,
+      "statusText": "読み込み・照合が完了しました。グラフ・照合結果一覧・モデルテキストは各タブを開いた時に生成します。 入力列から照合ペアを推定しました。 アノテーション 0ms / 照合 44ms / 索引 0ms / 結果 4ms / 合計 50ms / tag候補 6 / fuzzy省略 6"
+    }
+  },
+  {
+    "label": "after opening tabDetail/tabTrace",
+    "value": {
+      "downloadJsonBtnDisabled": true,
+      "traceReviewExportBtnDisabled": true
+    }
+  },
+  {
+    "label": "traceMatrixRows",
+    "value": {
+      "rowCount": 6,
+      "sample": [
+        {
+          "A_ID": "req-use-temperature",
+          "B_ID": "5",
+          "分類": "要確認",
+          "方式": "tag",
+          "信頼度": 0.88
+        },
+        {
+          "A_ID": "req-use-temperature",
+          "B_ID": "8",
+          "分類": "要確認",
+          "方式": "vector",
+          "信頼度": 0.8
+        },
+        {
+          "A_ID": "req-cooling-capacity",
+          "B_ID": "6",
+          "分類": "要確認",
+          "方式": "tag",
+          "信頼度": 0.88
+        },
+        {
+          "A_ID": "req-power-supply",
+          "B_ID": "7",
+          "分類": "要確認",
+          "方式": "tag",
+          "信頼度": 0.88
+        },
+        {
+          "A_ID": "req-noise",
+          "B_ID": "8",
+          "分類": "要確認",
+          "方式": "tag",
+          "信頼度": 0.88
+        },
+        {
+          "A_ID": "",
+          "B_ID": "9",
+          "分類": "B未参照",
+          "方式": "",
+          "信頼度": ""
+        }
+      ]
+    }
+  },
+  {
+    "label": "rowsForSchema(plm)[0] after normalization",
+    "value": {
+      "plmCount": 5,
+      "sysCount": 4,
+      "firstPlmHasSourceRecord": true,
+      "firstPlmHasQuantityAnalysis": true,
+      "firstPlmQuantityAnalysis": {
+        "probe": "quantity_analysis_survives_v1",
+        "value": 12.5,
+        "unit": "kW"
+      },
+      "firstPlmHasNestedArrayTrap": false,
+      "firstPlmTraceId": "design-use-temperature",
+      "firstPlmKeys": [
+        "trace_id",
+        "parent_id",
+        "trace_title",
+        "trace_text",
+        "trace_content",
+        "trace_category",
+        "trace_key_text",
+        "source_file",
+        "source_sheet",
+        "source_row",
+        "source_path",
+        "source_section_id",
+        "source_section_title",
+        "block_type",
+        "review_status",
+        "tags",
+        "unregistered_tags",
+        "source_record",
+        "quantity_analysis",
+        "_plmRowId"
+      ]
+    }
+  },
+  {
+    "label": "A_ID/B_ID values (all rows)",
+    "value": [
+      {
+        "A_ID": "req-use-temperature",
+        "B_ID": "5"
+      },
+      {
+        "A_ID": "req-use-temperature",
+        "B_ID": "8"
+      },
+      {
+        "A_ID": "req-cooling-capacity",
+        "B_ID": "6"
+      },
+      {
+        "A_ID": "req-power-supply",
+        "B_ID": "7"
+      },
+      {
+        "A_ID": "req-noise",
+        "B_ID": "8"
+      },
+      {
+        "A_ID": "",
+        "B_ID": "9"
+      }
+    ]
+  },
+  {
+    "label": "mergedResult captured",
+    "value": {
+      "present": true,
+      "topLevelKeys": [
+        "graph_name",
+        "graph_id",
+        "created_at",
+        "metadata",
+        "nodes",
+        "edges",
+        "sysml_text",
+        "sysList",
+        "plmList"
+      ]
+    }
+  },
+  {
+    "label": "attempt to locate a reviewable row",
+    "value": {
+      "ok": false,
+      "reason": "no-row-or-no-setTraceReview-fn",
+      "hasSetTraceReview": "undefined"
+    }
+  },
+  {
+    "label": "exportTraceReviewPackage() captured",
+    "value": {
+      "present": true,
+      "keys": [
+        "schemaVersion",
+        "tool",
+        "exportedAt",
+        "profile",
+        "reviews",
+        "manualRelations",
+        "replacements",
+        "trainingFeedback",
+        "traceSnapshot",
+        "resultMode",
+        "mlFeatureVersion",
+        "datasetSignature",
+        "overviewScopeDecisions",
+        "phase7Version"
+      ]
+    }
+  },
+  {
+    "label": "mergedResult.plmList entry for design-use-temperature",
+    "value": {
+      "hasSourceRecord": true,
+      "hasQuantityAnalysis": true,
+      "quantityAnalysis": {
+        "probe": "quantity_analysis_survives_v1",
+        "value": 12.5,
+        "unit": "kW"
+      },
+      "sourceRecord": {
+        "分類": "環境",
+        "設計項目": "使用温度範囲",
+        "標準機種情報": "0 °C～40 °C",
+        "顧客対応・検討内容": "高温側の使用限界を50 °Cまで拡張する。",
+        "検討結果": "0 °C～50 °Cで使用可能",
+        "根拠・備考": "圧縮機・ファン・制御部品の定格を確認済み。",
+        "照合タグ": "使用温度",
+        "確認状態": "確認済み"
+      }
+    }
+  },
+  {
+    "label": "review package traceSnapshot / reviews summary",
+    "value": {
+      "reviewsCount": 0,
+      "traceSnapshotKeys": [
+        "tool",
+        "profile",
+        "created_at",
+        "pairs"
+      ],
+      "profile": "generic",
+      "schemaVersion": 2,
+      "datasetSignature": "DS:4b6ad0e9:A4:B5"
+    }
+  }
+]
