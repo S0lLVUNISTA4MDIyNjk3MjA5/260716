@@ -85,16 +85,39 @@ v2.9〜v2.19の7回の外部レビュー往復・2種類の摂動テスト（5,6
 **現状、本体には未統合**。`tools/`直下の4つの単体HTMLツール（`spec_to_json_conversion_tool_v1.18.html`・`excel_to_json_conversion_tool_v2.0.8.html`・`json_ab_trace_matching_tool_v12.1.15.html`・`json_ab_trace_matching_tool_lite_v1.5.html`、計31,752行）が実際に稼働している本体であり、`tools/design_notes/`配下のプロトタイプ群とは完全に独立したコードベースである。
 
 調査した範囲で分かったこと：
-- `spec_to_json_conversion_tool_v1.18.html`は、PDF→「通常文書JSON」（DocumentModel 2.0形式）への変換に加え、`json_ab_trace_matching_tool`向けの「照合用JSON」（フォーマット名`chapter-section-trace-v1`）を出力する機能を持つ（該当コード: 同ファイル2136行目以降`/* ================= knowledge_tool_v12向け照合用JSON出力 ================= */`）。
-- この「照合用JSON」の各レコードは、`{id, content_hash, chapter_number, chapter_title, section_number, section_title, ...}`のような章・節単位の構造化テキスト情報を持つ。**`quantity`・`interval_semantics_candidates`・`comparisonMode`に相当するフィールドは、現状の本体スキーマには一切存在しない**。
+- `spec_to_json_conversion_tool_v1.18.html`は、PDF→「通常文書JSON」（DocumentModel 2.0形式）への変換に加え、`json_ab_trace_matching_tool`向けの「照合用JSON」（フォーマット名`chapter-section-trace-v1`）を出力する機能を持つ（該当コード: 同ファイル`makeTraceRecord()`・`buildTraceRecords()`、2228行目以降）。
+- この「照合用JSON」の各レコードは、`{id, trace_id, trace_title, trace_text, trace_key_text, chapter_number, chapter_title, section_number, section_title, source_raw_text, content_hash, ...}`のような章・節単位の構造化テキスト情報を持つ。**`quantity`・`interval_semantics_candidates`・`comparisonMode`に相当するフィールドは、現状の本体スキーマには一切存在しない**。
 - `json_ab_trace_matching_tool_v12.1.15.html`（12,355行）は、テキスト・タグベースの照合（信頼度スコアリング、ナレッジグラフ、トレースマトリクス）を行っており、数値の充足判定（`coverageGap()`相当の機能）は行っていない。
 
 **この調査から言えること**：本体統合は「既存の数値比較フックに新ロジックを差し込む」作業ではなく、「本体のtrace record（chapter-section-trace-v1形式）に、数量・意味候補・比較結果を表す新しいフィールド群を追加する」設計作業になる。ユーザー提案の`schema_version: "trace-comparison/1.0"`は、既存の`chapter-section-trace-v1`とは別レイヤーの追加スキーマとして設計するか、`chapter-section-trace-v1`自体を拡張するかの判断が必要（この判断はまだ行っていない）。
 
+### 7.1 Excel側の照合用JSON調査（完了）
+
+`excel_to_json_conversion_tool_v2.0.8.html`側を調査した。ツール自身が埋め込んでいる仕様書（`EXCEL_PROFILE_SPEC_MD`、3700行目）と、実際のレコード生成関数`buildTraceOutput()`（1904行目）の両方を確認し、内容が一致することを確かめた。
+
+Excel側は`excel-row-trace-v1`形式で、Excelの1行を1レコードとする。実際のコードにおけるレコードの完全な形（`buildTraceOutput()`の戻り値、1924〜1943行目）：
+
+```js
+{
+  trace_id, parent_id, trace_title, trace_text, trace_content,
+  trace_category, trace_key_text,
+  source_file, source_sheet, source_row, source_path,
+  source_section_id, source_section_title, block_type,
+  tags, unregistered_tags, review_status,
+  source_record: row   // ★元のExcel行オブジェクトを丸ごと保持
+}
+```
+
+PDF側（`makeTraceRecord()`、2228行目）もほぼ同型で、`source_raw_text: rawText`という形で元のテキストを丸ごと保持している。
+
+**PDF側・Excel側で共通して確認できた、統合設計上重要な事実**：
+1. **PDF側・Excel側ともに、`quantity`・単位・数量意味候補に相当するフィールドは一切存在しない。** 両方とも「テキストをどう寄せ集めて1レコードの`trace_text`にするか」という粒度の設計であり、数値比較の概念は最初から入っていない。
+2. **一方で、PDF側・Excel側ともに、元の生データを（`source_record`／`source_raw_text`として）レコードに保持している。** これは、既存のJSON生成パイプライン自体を改修しなくても、**この生データに対して`extractQuantities()`等を後から適用する後処理ステップを追加できる**ことを意味する。既存の`buildTraceOutput()`・`makeTraceRecord()`のフィールド構成を変更・追加する改修（リスクが本体全体に及ぶ）と、既存の出力へ外付けで新フィールドを付加する改修（リスクが局所化できる）の2通りの設計が考えられ、後者の方が既存機能への影響が小さい可能性が高い（ただし実際の改修コストの見積もりはまだ行っていない）。
+
 **未実施の調査（次工程で必要）**：
-- `excel_to_json_conversion_tool_v2.0.8.html`側の照合用JSON出力フォーマットの詳細（B側／実仕様側の対応する形）。
 - `json_ab_trace_matching_tool_v12.1.15.html`のマッチングキー選定・信頼度スコアリングロジックの内部実装（照合エンジンの、テキスト一致とは別に数値比較を追加する余地の有無）。
-- 実際に`spec_to_json_conversion_tool`・`excel_to_json_conversion_tool`を（ブラウザ上で）動かして、リアルな照合用JSON出力例を1件取得すること（本資料のNode.js実行環境では、ブラウザ依存のこれらのHTMLツールを直接実行できないため未取得）。
+- 実際に`spec_to_json_conversion_tool`・`excel_to_json_conversion_tool`を（ブラウザ上で）動かして、リアルな照合用JSON出力例を1件取得すること（本資料のNode.js実行環境では、ブラウザ依存のこれらのHTMLツールを直接実行できないため未取得。ただし、上記のコード直読みにより、出力の「形」自体はブラウザ実行なしでも高い確度で確認できた）。
+- ユーザー提案の`trace-comparison/1.0`の正式スキーマ設計（上記1・2を踏まえた、後付け方式か拡張方式かの判断を含む）。
 
 ## 8. プロトタイプから本体へ移植する関数一覧
 
