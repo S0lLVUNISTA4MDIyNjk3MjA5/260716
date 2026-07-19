@@ -213,5 +213,31 @@
       "設計特性の対応確信度0.90が閾値0.7以上"
     ],
     "fail_reasons": []
+  },
+  "comparisonResult": {
+    "comparable": true,
+    "provisional": true,
+    "comparison_mode": "point_in_region",
+    "assumptions": [
+      "同じ設計特性として選択済み",
+      "同じ運転条件",
+      "単位換算不要"
+    ],
+    "satisfied": true,
+    "lowGap": 0.5,
+    "highGap": null,
+    "boundaryMismatch": {
+      "lower": false,
+      "upper": false
+    },
+    "extractionWarnings": []
+  },
+  "fixtureAssumptions": {
+    "property_mapping": {
+      "concept_id": "performance.cooling_capacity",
+      "confidence": 0.9,
+      "source": "sample_fixture",
+      "note": "設計特性対応付け部分は本例の対象外なので既知の仮定として付与。実際の値はgeneratePropertyCandidates()の出力を使う。"
+    }
   }
 }

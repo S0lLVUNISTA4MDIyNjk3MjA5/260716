@@ -4,10 +4,12 @@
 
 ## 1. 基準コミット
 
-- **コミットSHA**: `b55b5218cbe4c1b632cadcbf5125511d659a834e`
+コードと引き継ぎ資料は別のコミットで追加されたため、2つのSHAを区別して記録する。
+
+- **`code_baseline_sha`**（プロトタイプのコード・テスト・実データコーパスが完成した時点）: `b55b5218cbe4c1b632cadcbf5125511d659a834e`（「Freeze UNIT_DEFS as truly immutable master data (v2.13)」）
+- **`handoff_snapshot_sha`**（この資料・サンプルJSONを含む、資料として参照可能な最終コミット）: 本コミット自身のSHA（`git log -1 --format=%H`で取得。この資料の文中に自身のハッシュ値を埋め込むことはできないため、`git tag baseline-v1`を本コミットへ付与し、`git rev-parse baseline-v1`で解決できるようにする）
 - **ブランチ**: `claude/pdf-excel-json-overview-pigbne`
-- **push日時**: 2026-07-18 23:05:28 +0000
-- **確認事項**: この資料を作成した時点で`git status`はクリーン（未コミットの変更なし）。この資料自体は、この後の新規コミットとして追加される。
+- **確認事項**: この資料を作成した時点で`git status`はクリーン（未コミットの変更なし）。次工程の担当者は、`code_baseline_sha`（またはタグ`baseline-v1`）をチェックアウトすればコードとテストを再現でき、`handoff_snapshot_sha`（＝`baseline-v1`タグ自身）は本資料・サンプルJSONまで含めた完全なスナップショットである。
 
 ## 2. 動作確認済み環境
 
@@ -112,9 +114,9 @@ v2.9〜v2.19の7回の外部レビュー往復・2種類の摂動テスト（5,6
 
 `CONCEPT_DICTIONARY`・`groupByTopConcept`・`autoCompareGroup`はHVACサンプル1件を前提としたデモ用の実装であり、本体統合時にそのまま使えるものではない（既存の本体照合エンジンが担う「どの要求とどの設計項目が対応するか」の判断とは別の粒度・目的で作られている）。
 
-## 9. 具体的な入出力例（プロトタイプ側、実行確認済み）
+## 9. 具体的な入出力例（プロトタイプ側、実行確認済み、5段階パイプライン全段を含む）
 
-要求文「周囲温度50 °Cにおいて、冷房能力12 kW以上を確保すること。」と実仕様文「周囲温度50 °Cで実測12.5 kW」（検討結果列）を、実際に現在のプロトタイプへ通した結果。
+要求文「周囲温度50 °Cにおいて、冷房能力12 kW以上を確保すること。」と実仕様文「周囲温度50 °Cで実測12.5 kW」（検討結果列）を、実際に現在のプロトタイプへ通した結果。3節に記載した5段階パイプライン（数量抽出→interval_semantics候補生成→comparisonMode候補導出→auto_applicable安全ゲート→数値比較）の**最終段（`coverageGap()`）まで到達させた結果**を示す。
 
 ```json
 {
@@ -149,21 +151,44 @@ v2.9〜v2.19の7回の外部レビュー往復・2種類の摂動テスト（5,6
       "否定根拠なし", "抽出警告なし",
       "設計特性の対応確信度0.90が閾値0.7以上"
     ]
+  },
+  "comparisonResult": {
+    "comparable": true,
+    "provisional": true,
+    "comparison_mode": "point_in_region",
+    "assumptions": ["同じ設計特性として選択済み", "同じ運転条件", "単位換算不要"],
+    "satisfied": true,
+    "lowGap": 0.5,
+    "highGap": null,
+    "boundaryMismatch": { "lower": false, "upper": false },
+    "extractionWarnings": []
+  },
+  "fixtureAssumptions": {
+    "property_mapping": {
+      "concept_id": "performance.cooling_capacity",
+      "confidence": 0.9,
+      "source": "sample_fixture",
+      "note": "設計特性対応付け部分は本例の対象外なので既知の仮定として付与。実際の値はgeneratePropertyCandidates()の出力を使う。"
+    }
   }
 }
 ```
 
+**`fixtureAssumptions`について**：`evalResult`（`evaluateAutoApplicable()`）へ渡した`propertyConfidence: 0.9`は、この例では`generatePropertyCandidates()`を実際には呼び出さず、サンプル用に仮定した値である。工程3の設計特性対応付け（「この数量がどの概念[冷房能力等]を指すか」の判定）は本例の対象外としたため、この仮定を明示しておく。本体統合時に実際の`property_candidates`を使う場合は、`generatePropertyCandidates()`の出力から`confidence`を取得すること。
+
+**`comparisonResult`について**：`evalResult.applicable === true`の場合のみ`coverageGap(reqRec, actRec, { comparisonMode: modeCandidate.value })`を呼び出し、`applicable === false`の場合は`{ comparable: false, reason: 'auto_applicable=false' }`を保存する（安全ゲートを通過しなかった照合は、数値比較そのものを行わない）。`lowGap`/`highGap`は要求の境界と実仕様値との差（3節参照）、`boundaryMismatch`は境界の包含/非包含（inclusive/exclusive）の食い違いを示す。`provisional: true`は、この結果が`confirmed`（人間確認済み）ではなく暫定であることを表す1節の原則そのものを反映している。
+
 完全な出力（`quantity`・`unit.standard_ref`・`condition_candidates`等を含む）は`tools/design_notes/baseline_v1_example_pipeline_output.json`に保存済み。再現するコマンド：
 
 ```js
-const { extractQuantities } = require('./tools/design_notes/quantity_extraction_prototype.js');
+const { extractQuantities, coverageGap } = require('./tools/design_notes/quantity_extraction_prototype.js');
 const { generateIntervalSemanticsCandidates, deriveComparisonModeCandidate, evaluateAutoApplicable } =
   require('./tools/design_notes/semantic_mapping_prototype.js');
 // reqText/actTextを与えてextractQuantities→generateIntervalSemanticsCandidates→
-// deriveComparisonModeCandidate→evaluateAutoApplicableの順に通す
+// deriveComparisonModeCandidate→evaluateAutoApplicable→(applicableならば)coverageGap()の順に通す
 ```
 
-ユーザー提案の`trace-comparison/1.0`スキーマにおける`requirement.interval_semantics_candidates`・`actual.interval_semantics_candidates`・`mapping.comparison_mode_candidate`・`automation`は、この出力の`reqCands`・`actCands`・`modeCandidate`・`evalResult`にほぼ1:1で対応させられる（フィールド名の付け替えのみで済む見込みだが、実際のマッピング作業は未実施）。
+ユーザー提案の`trace-comparison/1.0`スキーマにおける`requirement.interval_semantics_candidates`・`actual.interval_semantics_candidates`・`mapping.comparison_mode_candidate`・`automation`・`comparison`は、この出力の`reqCands`・`actCands`・`modeCandidate`・`evalResult`・`comparisonResult`にほぼ1:1で対応させられる（フィールド名の付け替えのみで済む見込みだが、実際のマッピング作業は未実施）。
 
 ## 10. 本資料の位置づけ
 
