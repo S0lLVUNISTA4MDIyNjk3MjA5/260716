@@ -53,8 +53,10 @@ v2.9〜v2.19の7回の外部レビュー往復・2種類の摂動テスト（5,6
 3. **定義されていない意味ペアは比較しない**（`COMPARISON_MODE_DERIVATION_TABLE`）：`required_capability_domain × achieved_point`（v2.10で除外）、`* × aggregated_representative_value`（v2.18で意図的に不登録）等、明示的にテーブルへ登録した組み合わせ以外はcomparisonModeを導出しない。
 4. **抽出警告があれば自動比較しない**（`evaluateAutoApplicable()`の`extractionWarningsCount`）。
 5. **統計的集約値（代表値/平均値/中央値/最頻値）は単一達成値として比較しない**（8.21節）：`aggregated_representative_value`は`COMPARISON_MODE_DERIVATION_TABLE`に一切登録されていないため、要求側とのペアで常にcomparisonMode候補なし＝`applicable:false`になる。
+6. **照合エンジンが表示する`B_ID`を永続的な主キーとして扱わない**（7.2.4節の訂正・7.4節）：`B_ID`はB側`trace_id`と一致するとは限らない（`plmBusinessKey()`が他項目を優先するため）。sidecarレコードの`actual_ref`は、B側レコード自身が持つ`trace_id`フィールドを直接参照して引き当てる。`B_ID`は既存UIとの表示対応にのみ用いる。
+7. **`extractRecordList()`は明示的な`_trace_records`を最優先で採用する**（7.2.1節・7.3節、`json_ab_trace_matching_tool_v12.1.15.html`の`extractRecordList()`に実装済み）：入力データが`{_trace_records: [...]}`の形（PDF/Excel側の照合用JSONの実際の形）であれば、`findRecordArrays()`によるスキーマ非依存の「最大配列」探索へフォールバックする前に、必ずこの明示形式を採用する。`source_record`等の内部に`_trace_records`より要素数の多い配列が混入しても、選択が誤って乗っ取られないことを保証する（回帰テスト: `_trace_records`5件＋`source_record.nested_array`200件→必ず5件を選ぶ、Playwright実行で確認済み）。
 
-この5条件は、`interval_semantics_fuzz_test.js`・`vocabulary_negation_fuzz_test.js`・`real_corpus_validation.js`の3スイートが継続的に検証している内容そのものである。本体統合時にロジックを移植・改修する際は、この3スイートも一緒に移植し、CI等で回し続けることを推奨する。
+この6条件のうち1〜5は、`interval_semantics_fuzz_test.js`・`vocabulary_negation_fuzz_test.js`・`real_corpus_validation.js`の3スイートが継続的に検証している内容そのものである。本体統合時にロジックを移植・改修する際は、この3スイートも一緒に移植し、CI等で回し続けることを推奨する。6は`json_ab_trace_matching_tool_v12.1.15.html`側のデータ契約であり、上記3スイートの対象外（別途、本体側のテストで担保する）。
 
 ## 5. 次工程で変更してよい部分・変更してはいけない部分
 
@@ -182,7 +184,7 @@ adaptDocumentJsonToTraceRecords()  // 2613行目：文書JSON(sections配列等)
 - 差分表示（`applyTraceDiff()`）は「分類」「方式」「信頼度」の3項目しか見ておらず、`quantity_comparison`の変化を検知しない。
 - 照合結果一覧・トレースマトリクスのUI（`traceMatrixRows`等の日本語ラベル行）に、数量比較結果を表示する列を追加するには、別途UI改修が要る。
 - レビュー状態の永続化は`localStorage`が一次的であり、`quantity_comparison`のreview状態をどこに persist するか（既存の`_reviewKey`と同じ仕組みに相乗りするか、別のキー空間にするか）は未検討。
-- **配列選択リスク（新規、実ブラウザ実行で確認）**：`findRecordArrays()`／`arrayScoreForSchema()`は`INPUT_FIELD_SCHEMAS.sys/plm.fields`が空オブジェクトのため意味的な判定を行わず、実質「JSON内で最大の配列を選ぶ」動作になっている。B側レコード内に`_trace_records`（実データでは5件）より要素数の多いネスト配列が存在すると、そちらが誤って選択されデータソースが丸ごと入れ替わることを閾値実験で確認した（trapSize 5以下は安全、6以上でハイジャック。`runtime_fixtures/array_selection_risk_results.json`）。**したがって、sidecarの候補配列（例：`interval_semantics_candidates`のような複数候補を持つフィールド）をB側レコードの直下に生の配列として埋め込む設計は避けるべきで、オブジェクト内にネストする（配列を最上位から一段隠す）か、別ファイル・別キー空間として扱う必要がある。**
+- **配列選択リスク（実ブラウザ実行で確認、修正済み）**：`findRecordArrays()`／`arrayScoreForSchema()`は`INPUT_FIELD_SCHEMAS.sys/plm.fields`が空オブジェクトのため意味的な判定を行わず、実質「JSON内で最大の配列を選ぶ」動作になっている。B側レコード内に`_trace_records`（実データでは5件）より要素数の多いネスト配列が存在すると、そちらが誤って選択されデータソースが丸ごと入れ替わることを閾値実験で確認した（trapSize 5以下は安全、6以上でハイジャック。`runtime_fixtures/array_selection_risk_results.json`）。**この本体側の脆弱性そのものを`extractRecordList()`の修正で解消済み**（7.3節・7.4節、`json_ab_trace_matching_tool_v12.1.15.html`）。sidecar設計上も、候補配列（例：`interval_semantics_candidates`）をB側レコード直下に生の配列として置く構成は引き続き避け、オブジェクト内にネストするのが望ましい（本体側の修正は「今回確認した特定の混入パターン」への対処であり、あらゆる配列混入パターンを一般的に無害化するものではないため、多重の防御として両方を維持する）。
 
 ### 7.3 実ブラウザ出力による検証（完了、一部制約あり）
 
@@ -192,16 +194,44 @@ adaptDocumentJsonToTraceRecords()  // 2613行目：文書JSON(sections配列等)
 
 確認できたこと：
 1. **未知フィールドの生存**：B側レコードへ注入した合成フィールド`quantity_analysis`と、元々の`source_record`は、いずれも正規化・照合・エクスポート（`mergedResult.plmList`）の全段階で欠落せず残ることを確認した（7.2.1・7.2.3の静的解析を裏付ける）。
-2. **配列選択リスク（新規）**：`_trace_records`より要素数の多いネスト配列がB側レコード内に存在すると、照合エンジンのデータソース選択がそちらへ完全にハイジャックされることを、しきい値実験（trapSize 0/4/5/6/10/50/200）で確認した。実データ件数（5件）に対し、trapSize 5以下は安全、6以上でハイジャックという正確な境界を確認した（`array_selection_risk_results.json`）。
+2. **配列選択リスク（発見・修正済み）**：`_trace_records`より要素数の多いネスト配列がB側レコード内に存在すると、照合エンジンのデータソース選択がそちらへ完全にハイジャックされることを、しきい値実験（trapSize 0/4/5/6/10/50/200）で確認した。実データ件数（5件）に対し、trapSize 5以下は安全、6以上でハイジャックという正確な境界を確認した（`array_selection_risk_results.json`）。`extractRecordList()`に`_trace_records`を最優先で採用する分岐を追加して修正し、`source_record`配下にtrapSize 200の配列を仕込んでも実データ5件が正しく選ばれることを回帰テストで確認した（`array_selection_fix_verification.json`）。
 3. **B_IDの訂正（重要）**：A_IDはA側`trace_id`と一致するが、**B_IDはB側`trace_id`と一致しない**（`plmBusinessKey()`が`trace_id`優先ロジックより先に他項目を試すため）。7.2.4節の該当箇所を訂正済み。
 4. **レビューパッケージの構造**：`window.exportTraceReviewPackage()`の実出力を確認した（キー: `schemaVersion`/`tool`/`exportedAt`/`profile`/`reviews`/`manualRelations`/`replacements`/`trainingFeedback`/`traceSnapshot`/`resultMode`/`mlFeatureVersion`/`datasetSignature`/`overviewScopeDecisions`/`phase7Version`）。
 
-**未確認のまま残った点（今回の検証で埋まらなかったギャップ）**：
+**未確認のまま残った点（今回の検証で埋まらなかったギャップ、後回しでよいと判断）**：
 - ダウンロードボタン（`#downloadJsonBtn`／`#traceReviewExportBtn`）のクリック→ダウンロードという実際のUI経路そのものは検証できていない。両ボタンとも、タブを開いた後も`disabled`のままだったため、代わりに内部データ（`mergedResult`・`window.exportTraceReviewPackage()`）を`page.evaluate()`経由で直接取得する方法（`samples/hvac_trace_sample_small/verification_report.md`が先行して用いた手法と同じ）で代替した。原因は未特定（ボタンを再バインドする`cloneAndBind()`パターンが影響している可能性はあるが未確認）。
 - レビューパッケージの再取り込み（`importTraceReviewPackage()`）によるレビュー状態の復元は未検証。
-- PDF側`source_raw_text`の生存確認は、今回はExcel側（`source_record`）のみ実施し、PDF側では行っていない。
+- quantity比較の差分表示・UI列追加・localStorageのキー設計・簡易版のコード確認：いずれも`trace-comparison/1.0`の`review`構造が固まってから検証する方が効率的なため、正式スキーマ設計後に回す。
 
-これらのギャップは`trace-comparison/1.0`の正式スキーマ設計を妨げるものではないが、実装フェーズで解消しておくことが望ましい。
+PDF側`source_raw_text`の生存確認は、スキーマ設計に直接影響する項目のため、後回しにせず7.4節で実施した。
+
+### 7.4 スキーマ設計に直接影響する3点の先行対応
+
+正式スキーマ設計に着手する前に、レビューで指摘された「配列選択のハイジャック」「ペアIDのデータ契約」「PDF側原文保持」の3点を先行して処理した。
+
+**1. 配列選択の明示的優先（修正済み）**：上記7.3節2番目の通り、`extractRecordList()`へ`_trace_records`最優先の分岐を追加し、回帰テストで確認した（`json_ab_trace_matching_tool_v12.1.15.html`、コミット済み）。
+
+**2. ペアIDのデータ契約（確定）**：7.2.4節の訂正（A_ID=A側trace_id、B_ID≠B側trace_id）を踏まえ、次の契約を`trace-comparison/1.0`の不変条件として確定する（§4の6番目にも追記済み）。
+
+```json
+{
+  "requirement_ref": {
+    "trace_id": "req-use-temperature",
+    "matcher_id": "req-use-temperature"
+  },
+  "actual_ref": {
+    "trace_id": "design-use-temperature",
+    "matcher_id": "5",
+    "source_row": 5
+  }
+}
+```
+
+- 主キー（sidecarレコードが要求側・実仕様側のどのレコードを指すかの一意な参照）には、必ず元レコード自身の`trace_id`（`requirement_ref.trace_id`／`actual_ref.trace_id`）を使う。
+- `matcher_id`は照合エンジンが表示する`A_ID`／`B_ID`をそのまま保持するフィールドとし、既存UI（トレースマトリクス等）との対応付けにのみ用いる。A側は`matcher_id === trace_id`が常に成立するが、B側は成立するとは限らない（`source_row`等、別の値になり得る）ことを前提にする。
+- `comparison_id`は`requirement_ref.trace_id + actual_ref.trace_id + quantity_pair_id`から生成する（`matcher_id`は使わない）。これにより、照合エンジンの内部ID割当が変わっても（例：行の並び順が変わり`B-5`が別レコードを指すようになっても）sidecarの参照は安定する。
+
+**3. PDF側`source_raw_text`の生存確認（完了）**：Excel側（`source_record`）と同じ手法で、PDF側の`source_raw_text`が入力JSON→`canonicalizeRows`→照合エンジン内部→`mergedResult`の全段階で一致することを確認した。使用した入力は`samples/hvac_trace_sample_small/JSON_A_customer_requirements_trace.json`（A側、`chapter-section-trace-v1`形式で`source_raw_text`を保持）。結果：`mergedResult.sysList`の各レコードで`source_raw_text`が入力JSONの値と完全一致することを確認した（`runtime_fixtures/pdf_source_raw_text_verification.json`）。これにより、7.1節で確認した「PDF側・Excel側ともに元の生データを保持する」という静的解析の結論は、B側（`source_record`）に続きA側（`source_raw_text`）についても実行時に裏付けられた。
 
 ## 8. プロトタイプから本体へ移植する関数一覧
 

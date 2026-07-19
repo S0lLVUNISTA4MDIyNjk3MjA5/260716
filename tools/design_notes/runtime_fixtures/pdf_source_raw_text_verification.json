@@ -1,0 +1,37 @@
+{
+  "allMatch": true,
+  "comparisons": [
+    {
+      "trace_id": "req-use-temperature",
+      "input_matches_normalized": true,
+      "input_matches_merged": true,
+      "input": "空調ユニットは、周囲温度0 °Cから50 °Cの環境で正常に運転できること。",
+      "normalized": "空調ユニットは、周囲温度0 °Cから50 °Cの環境で正常に運転できること。",
+      "merged": "空調ユニットは、周囲温度0 °Cから50 °Cの環境で正常に運転できること。"
+    },
+    {
+      "trace_id": "req-cooling-capacity",
+      "input_matches_normalized": true,
+      "input_matches_merged": true,
+      "input": "周囲温度50 °Cにおいて、冷房能力12 kW以上を確保すること。",
+      "normalized": "周囲温度50 °Cにおいて、冷房能力12 kW以上を確保すること。",
+      "merged": "周囲温度50 °Cにおいて、冷房能力12 kW以上を確保すること。"
+    },
+    {
+      "trace_id": "req-power-supply",
+      "input_matches_normalized": true,
+      "input_matches_merged": true,
+      "input": "定格電源は三相AC 220 V、50 Hzとすること。",
+      "normalized": "定格電源は三相AC 220 V、50 Hzとすること。",
+      "merged": "定格電源は三相AC 220 V、50 Hzとすること。"
+    },
+    {
+      "trace_id": "req-noise",
+      "input_matches_normalized": true,
+      "input_matches_merged": true,
+      "input": "定格運転時の装置正面1 mにおける騒音値は60 dB(A)以下とすること。",
+      "normalized": "定格運転時の装置正面1 mにおける騒音値は60 dB(A)以下とすること。",
+      "merged": "定格運転時の装置正面1 mにおける騒音値は60 dB(A)以下とすること。"
+    }
+  ]
+}
