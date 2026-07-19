@@ -257,6 +257,8 @@ if (require.main === module) {
   console.log('直接測定するものではない。実文書に本テストが想定していない語彙・構文パターンが');
   console.log('含まれていれば、この検証は捕捉できない。匿名化した実文書コーパスが確保できた時点で、');
   console.log('本来の測定に置き換えることが望ましい(8.15節・8.16節と同じ限界)。');
+  // レビュー指摘: 失敗時にも終了コードが0のままだとCIで失敗を見逃す。非ゼロで終了する。
+  process.exitCode = failCount > 0 ? 1 : 0;
 }
 
 module.exports = { generateRandomMutant, runVocabularyFuzzTest, POSITIVE_KEYWORDS, CAPABILITY_KEYWORDS, NEGATIVE_KEYWORDS, NEGATION_SUFFIXES };

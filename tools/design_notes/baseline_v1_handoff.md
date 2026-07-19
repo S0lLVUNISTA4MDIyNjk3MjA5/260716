@@ -24,12 +24,14 @@
 ## 3. テストスイート一括実行コマンドと期待件数
 
 ```bash
-node tools/design_notes/quantity_extraction_prototype.js    # 期待: 64件中64件成功
+node tools/design_notes/quantity_extraction_prototype.js    # 期待: 68件中68件成功
 node tools/design_notes/semantic_mapping_prototype.js       # 期待: 86件中86件成功
 node tools/design_notes/interval_semantics_fuzz_test.js     # 期待: 6件中6件成功
 node tools/design_notes/vocabulary_negation_fuzz_test.js    # 期待: 6件中6件成功
 node tools/design_notes/real_corpus_validation.js           # 期待: 3件中3件成功
 ```
+
+> **v2.14追記**：`quantity_extraction_prototype.js`は64→68件（`source_span`追加に伴う回帰テスト4件）。全5スイートとも、失敗時に非ゼロ終了コードを返すよう修正済み（`process.exitCode = failCount > 0 ? 1 : 0`）。従来は失敗があってもプロセスは常に終了コード0を返しており、CIでの単純実行では失敗を見逃す設計だった（レビュー指摘、実際に無修正時の挙動を確認して発見）。
 
 一括実行・件数確認:
 

@@ -1,4 +1,4 @@
-// 工程4a（数量抽出）たたき台プロトタイプ v2.13
+// 工程4a（数量抽出）たたき台プロトタイプ v2.14
 // tools/design_notes/quantity_extraction_prototype_review.md の必須修正6項目
 // （符号付き数値／区間統合／境界包含区分／原文保持／暫定判定明示／条件誤伝播防止）
 // および、そのレビュー過程で追加発見した2件（±公差、桁区切りカンマ）を反映。
@@ -63,6 +63,15 @@
 // v2.13: 再レビューの軽微な将来改善提案「本体統合時に不変マスターとして扱うならUNIT_DEFSを
 //        凍結すべき」に対応し、配列・各エントリ・各standard_refの3階層をObject.freeze()した。
 //        承認を妨げる指摘ではなかったが、変更コストが小さく安全性が上がるため反映した。
+// v2.14: trace_comparison_schema_v1.md設計へのレビューで、数量IDの識別に使っていた
+//        occurrence_index(同じnormalized_textが複数回出現する場合の出現順カウンタ)が、結局
+//        extractQuantities()自身の出力順序への暗黙依存を解消できていない、との指摘を受けた
+//        （抽出器を並べ替えたり、原文の先頭に同じ表記の数量を追加すると、既存レビューが別の
+//        数量へ誤って結び付き得る）。抽出処理は内部で絶対文字位置(absStart/absEnd)を既に計算
+//        していたが、戻り値には含めていなかった。これをsource_span: {start, end}として正式に
+//        返すよう修正した(condition_candidatesの数量にも同様に付与)。原文中の同一表記が複数回
+//        出現しても、それぞれ異なるsource_spanを持つため、内容ハッシュにsource_spanを含めれば
+//        occurrence_indexという間接的な位置特定に頼らずに数量を一意識別できる。
 // 依存ライブラリなし。 `node quantity_extraction_prototype.js` で単体実行できる。
 
 // v2.11(実データ検証で発見): real_corpus_validation.js(8.18節)で、国土交通省「公共建築工事
@@ -406,6 +415,10 @@ function extractFromSentence(sentenceText, sentenceOffset, fullOriginal) {
       const warnings = [...q.warnings];
       const out = {
         source_text: fullOriginal.slice(absStart, absEnd),
+        // v2.14: 原文(fullOriginal)内の絶対文字位置。同じnormalized_textが複数回出現しても
+        // 出現ごとに異なる値になるため、occurrence_indexのような間接的な位置特定に頼らずに
+        // 数量を一意識別できる(trace_comparison_schema_v1.mdのquantity_id導出で使用する)。
+        source_span: { start: absStart, end: absEnd },
         normalized_text: norm.slice(q.startLocal, q.endLocal),
         quantity: q.quantity,
         unit: q.unit,
@@ -419,6 +432,7 @@ function extractFromSentence(sentenceText, sentenceOffset, fullOriginal) {
         const cAbsEnd = sentenceOffset + q._condition.endLocal;
         out.condition_candidates = [{
           source_text: fullOriginal.slice(cAbsStart, cAbsEnd),
+          source_span: { start: cAbsStart, end: cAbsEnd },
           quantity: q._condition.quantity,
           unit: q._condition.unit,
           confidence: 0.7,
@@ -995,7 +1009,33 @@ if (require.main === module) {
       UNIT_DEFS.length === originalLength);
   }
 
+  // ── v2.14(trace_comparison_schema_v1.mdへのレビュー): source_spanが原文中の絶対位置を
+  // 正しく返し、同じ表記の数量が複数回出現しても出現ごとに異なるspanを持つことを確認する ──
+  {
+    const single = extractQuantities('周囲温度50 °Cにおいて、冷房能力12 kW以上を確保すること。')[0];
+    check('source_span(v2.14): 単一の数量で、原文をsource_spanのstart/endで切り出すとsource_textと一致する',
+      single && single.source_text === '周囲温度50 °Cにおいて、冷房能力12 kW以上を確保すること。'.slice(single.source_span.start, single.source_span.end));
+
+    // レビュー指摘の再現例: 同一表記("50 ℃")が1文中に2回出現するケース。
+    const dup = extractQuantities('入口温度は50 ℃、出口温度は50 ℃とする。');
+    check('source_span(v2.14): 同一表記("50 ℃")が2回出現する文で、2件の数量が抽出される',
+      dup.length === 2 && dup[0].normalized_text === dup[1].normalized_text);
+    check('source_span(v2.14): 同一表記でもsource_spanは出現ごとに異なり、それぞれ元の位置を正しく指す(occurrence_indexという間接的な位置特定に頼らず一意識別できる)',
+      dup.length === 2 &&
+      (dup[0].source_span.start !== dup[1].source_span.start) &&
+      dup.every(q => q.source_text === '入口温度は50 ℃、出口温度は50 ℃とする。'.slice(q.source_span.start, q.source_span.end)));
+
+    // 条件節側(condition_candidates)にもsource_spanが付与されることを確認する。
+    const withCond = extractQuantities('周囲温度50 °Cで実測12.5 kW')[0];
+    check('source_span(v2.14): condition_candidatesの数量にもsource_spanが付与され、原文の位置を正しく指す',
+      withCond && withCond.condition_candidates && withCond.condition_candidates[0].source_span &&
+      withCond.condition_candidates[0].source_text === '周囲温度50 °Cで実測12.5 kW'.slice(
+        withCond.condition_candidates[0].source_span.start, withCond.condition_candidates[0].source_span.end));
+  }
+
   assertions.forEach(a => console.log((a.pass ? '[OK] ' : '[FAIL] ') + a.name));
   const failCount = assertions.filter(a => !a.pass).length;
   console.log(`\n合計 ${assertions.length}件中 ${assertions.length - failCount}件成功 / ${failCount}件失敗`);
+  // v2.14(レビュー指摘): 失敗時にも終了コードが0のままだとCIで失敗を見逃す。非ゼロで終了する。
+  process.exitCode = failCount > 0 ? 1 : 0;
 }

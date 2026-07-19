@@ -1191,4 +1191,6 @@ if (require.main === module) {
   assertions.forEach(a => console.log((a.pass ? '[OK] ' : '[FAIL] ') + a.name));
   const failCount = assertions.filter(a => !a.pass).length;
   console.log(`\n合計 ${assertions.length}件中 ${assertions.length - failCount}件成功 / ${failCount}件失敗`);
+  // レビュー指摘: 失敗時にも終了コードが0のままだとCIで失敗を見逃す。非ゼロで終了する。
+  process.exitCode = failCount > 0 ? 1 : 0;
 }

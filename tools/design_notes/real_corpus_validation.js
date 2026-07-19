@@ -105,6 +105,8 @@ if (require.main === module) {
   console.log('   「による」は参照表現(「特記による」等)がほぼ全てであり値を規定しないため、意図的に');
   console.log('   未対応のまま。「望ましい」(推奨事項)・「してもよい」(許容事項)も、要求の強さが');
   console.log('   「とする」とは異なるため、意図的に未対応のまま残している。詳細は8.20節を参照。');
+  // レビュー指摘: 失敗時にも終了コードが0のままだとCIで失敗を見逃す。非ゼロで終了する。
+  process.exitCode = failCount > 0 ? 1 : 0;
 }
 
 module.exports = { runValidation, corpus };
