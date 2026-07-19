@@ -9,7 +9,8 @@
 
 > **改訂履歴**
 > - `22c5e24`→`938ccf7`：順序依存の`quantity_pair_id`・単一`review.confirmed`による確認範囲の混同・候補配列から単一`mapping`への縮約過程の欠落・再現性情報（source hash・ruleset・閾値）の欠落、の4点へ対応。
-> - `938ccf7`→本改訂：レビュアー交代後の指摘で、次が未解決と判定された。(1) `simpleHash()`（32-bit FNV-1a）を陳腐化・取り違え検出に使うのは実装上不十分（実際にハッシュ衝突を再現して確認済み、後述）、(2) `quantity_id`が`occurrence_index`（抽出順序に間接依存）に頼ったままで真の順序非依存になっていない、(3) `review.confirmed_targets`の対象が`mapping`/`comparison_mode`/`satisfied`の3つのみで、数量抽出・単位・条件整合が確認対象に含まれず、依存関係も未定義、(4) §11の「完全な具体例」が、実際には無関係な2つのレコード（`design-use-temperature`と冷房能力の数量）を組み合わせて作られており、参照整合性が取れていなかった。本改訂は(1)(2)(4)を解消し、(3)に対応した。`quantity-annotation/1.0-rc1`との対応関係、および`-rc1`から正式版への昇格条件は`shadow_mode_integration_design.md` §9に記録した。
+> - `938ccf7`→`54ad4df`：レビュアー交代後の指摘で、次が未解決と判定された。(1) `simpleHash()`（32-bit FNV-1a）を陳腐化・取り違え検出に使うのは実装上不十分（実際にハッシュ衝突を再現して確認済み）、(2) `quantity_id`が`occurrence_index`（抽出順序に間接依存）に頼ったままで真の順序非依存になっていない、(3) `review.confirmed_targets`の対象が`mapping`/`comparison_mode`/`satisfied`の3つのみで、数量抽出・単位・条件整合が確認対象に含まれず、依存関係も未定義、(4) §11の「完全な具体例」が、実際には無関係な2つのレコード（`design-use-temperature`と冷房能力の数量）を組み合わせて作られており、参照整合性が取れていなかった。`54ad4df`は(1)(2)(4)を解消し、(3)に対応した。
+> - `54ad4df`→本改訂：さらなる再指摘で、(a) 検証スクリプトが出力する`review`が旧構造のままで文書側だけ手修正されていた、(b) `content_hash`/`quantity_id`が両方とも16桁（64-bit）に切り詰められており`hash_algorithm: "SHA-256"`の表記と矛盾していた、(c) `content_hash`の対象が本文・セル値のみでタグ・列見出しを含んでいなかった、(d) `relationship`の値が実際にはfixtureから読み込まれず定数として埋め込まれていた、という4点、続いて(e) `content_hash`が意味候補生成に実際使う「同じ行の他フィールド（設計項目列）」を含んでいなかった、(f) ハッシュ入力構築が`v12HashParts()`と同一契約になっていなかった、(g) `dataset_signature`の「仕様確定」と「実装済み」が区別されていなかった、という3点が指摘された。本改訂はすべて解消し、文書に埋め込まれたJSONと検証スクリプトの生成物のdeep-equalを自動テストする仕組みを追加した（文書側の手修正による乖離を実際に検出・修正した経緯がある）。`-rc1`から正式版への昇格条件は`shadow_mode_integration_design.md` §9に記録した。
 
 ## 1. 設計原則
 
@@ -342,18 +343,18 @@ all_confirmed =
   "not_analyzed": [],
   "comparisons": [
     {
-      "comparison_id": "req-cooling-capacity::design-cooling-capacity::q-ed9e1b0e2bb3730660a560292ea1b509::q-cb3dc528de8f7e9ac48943439046f69f",
+      "comparison_id": "req-cooling-capacity::design-cooling-capacity::q-38c7ca477d7aa6f2dc37b031f013d94a::q-ef1d2735ec9e23b703bf09b3ec407814",
       "requirement_ref": { "trace_id": "req-cooling-capacity", "matcher_id": "req-cooling-capacity" },
       "actual_ref": { "trace_id": "design-cooling-capacity", "matcher_id": "6", "source_row": 6 },
-      "quantity_pair_id": "q-ed9e1b0e2bb3730660a560292ea1b509::q-cb3dc528de8f7e9ac48943439046f69f",
+      "quantity_pair_id": "q-38c7ca477d7aa6f2dc37b031f013d94a::q-ef1d2735ec9e23b703bf09b3ec407814",
       "relationship": {
         "source": "matching_engine", "match_method": "tag", "match_confidence": 0.88,
         "review_category": "要確認", "linked_at": null
       },
       "requirement_analysis": {
-        "quantity_id": "q-ed9e1b0e2bb3730660a560292ea1b509", "source_field": "source_raw_text", "occurrence_index": 0,
+        "quantity_id": "q-38c7ca477d7aa6f2dc37b031f013d94a", "source_field": "source_raw_text", "occurrence_index": 0,
         "source_span": { "start": 18, "end": 23 },
-        "content_hash": "7a48895380cb969ebc07b77c7bad7482e74429c0256d587f6f422c9318d82582",
+        "content_hash": "40eab015725d87f8a1f4d0895065319d0b1dc13d075ffee6b2507901f64846be",
         "quantity": {
           "source_text": "12 kW", "source_span": { "start": 18, "end": 23 }, "normalized_text": "12 kW",
           "quantity": { "kind": "interval", "lower": { "value": 12, "inclusive": true }, "upper": null },
@@ -380,9 +381,9 @@ all_confirmed =
         ]
       },
       "actual_analysis": {
-        "quantity_id": "q-cb3dc528de8f7e9ac48943439046f69f", "source_field": "検討結果", "occurrence_index": 0,
+        "quantity_id": "q-ef1d2735ec9e23b703bf09b3ec407814", "source_field": "検討結果", "occurrence_index": 0,
         "source_span": { "start": 10, "end": 17 },
-        "content_hash": "4adc55e65116472a82c265a8d68d4485fa0c57b2572d77744374441cadc66450",
+        "content_hash": "df7b2634c48b437a549386fac2c56a1938f8e67e7a62d49fcbd20ca3ce96827d",
         "quantity": {
           "source_text": "12.5 kW", "source_span": { "start": 10, "end": 17 }, "normalized_text": "12.5 kW",
           "quantity": { "kind": "interval", "lower": { "value": 12.5, "inclusive": true }, "upper": { "value": 12.5, "inclusive": true } },
