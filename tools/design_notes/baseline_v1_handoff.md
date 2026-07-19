@@ -115,9 +115,70 @@ PDF側（`makeTraceRecord()`、2228行目）もほぼ同型で、`source_raw_tex
 2. **一方で、PDF側・Excel側ともに、元の生データを（`source_record`／`source_raw_text`として）レコードに保持している。** これは、既存のJSON生成パイプライン自体を改修しなくても、**この生データに対して`extractQuantities()`等を後から適用する後処理ステップを追加できる**ことを意味する。既存の`buildTraceOutput()`・`makeTraceRecord()`のフィールド構成を変更・追加する改修（リスクが本体全体に及ぶ）と、既存の出力へ外付けで新フィールドを付加する改修（リスクが局所化できる）の2通りの設計が考えられ、後者の方が既存機能への影響が小さい可能性が高い（ただし実際の改修コストの見積もりはまだ行っていない）。
 
 **未実施の調査（次工程で必要）**：
-- `json_ab_trace_matching_tool_v12.1.15.html`のマッチングキー選定・信頼度スコアリングロジックの内部実装（照合エンジンの、テキスト一致とは別に数値比較を追加する余地の有無）。
-- 実際に`spec_to_json_conversion_tool`・`excel_to_json_conversion_tool`を（ブラウザ上で）動かして、リアルな照合用JSON出力例を1件取得すること（本資料のNode.js実行環境では、ブラウザ依存のこれらのHTMLツールを直接実行できないため未取得。ただし、上記のコード直読みにより、出力の「形」自体はブラウザ実行なしでも高い確度で確認できた）。
-- ユーザー提案の`trace-comparison/1.0`の正式スキーマ設計（上記1・2を踏まえた、後付け方式か拡張方式かの判断を含む）。
+- 実際に`spec_to_json_conversion_tool`・`excel_to_json_conversion_tool`を（ブラウザ上で）動かして、リアルな照合用JSON出力例を1件取得すること（本資料のNode.js実行環境では、ブラウザ依存のこれらのHTMLツールを直接実行できないため未取得。ただし、下記7.2節のコード直読みにより、出力の「形」自体はブラウザ実行なしでも高い確度で確認できた）。
+- ユーザー提案の`trace-comparison/1.0`の正式スキーマ設計（7.2節を踏まえた、後付け方式か拡張方式かの判断を含む）。
+
+### 7.2 照合エンジン（json_ab_trace_matching_tool_v12.1.15.html）の調査（完了）
+
+ユーザー指定の4段階（入力・正規化／候補ペア生成／スコア構造／結果の保存・再読込）に沿って、実際のコードを読んで確認した。すべて実行はせず、静的にコードを読んだ結果である。
+
+#### 7.2.1 入力・正規化
+
+読込パイプラインは`prepareInputData(rawData, schemaName)`（2654行目）で、次の順に処理する。
+
+```
+adaptDocumentJsonToTraceRecords()  // 2613行目：文書JSON(sections配列等)を trace_records へ変換するアダプタ
+  → extractRecordList()            // 2385行目：JSON内から候補となる配列を探索
+  → canonicalizeRows()             // 2402行目：フィールド名のゆらぎを吸収
+  → annotateGranularity()          // 粒度注釈(表示・集計専用、照合ロジックには不使用)
+```
+
+**`chapter-section-trace-v1`／`excel-row-trace-v1`のような、既に`_trace_records`を持つ「照合用JSON」（本体が主に受け取る入力）に対しては、`adaptDocumentJsonToTraceRecords()`は素通りする。** `detectDocumentJsonKind()`（2438行目）は`document_type`・`requirements`配列・`purchase_spec_items`／`target_parts`配列・`sections`配列の有無だけで判定しており、`_trace_records`や`trace_format`は一切見ていない。したがって`_trace_records`を持つ入力はこのアダプタでは検出されず（`kind === ''`）、素の`rawData`のまま次段へ渡る。
+
+次段の`extractRecordList()`は`findRecordArrays()`（2360行目）でJSON内の**あらゆる配列**を再帰的に列挙し、`arrayScoreForSchema()`（2375行目）で最もそれらしい配列を選ぶ。ただし**`INPUT_FIELD_SCHEMAS.sys.fields`・`INPUT_FIELD_SCHEMAS.plm.fields`はいずれも空オブジェクト`{}`**（2292〜2295行目）であり、フィールド名に基づく意味的なスコアリングは実質機能していない（`arrayScoreForSchema()`の計算式は主に配列サイズで決まる）。`_trace_records`は通常最大の配列になるため、これが自動選択される可能性が高い。
+
+続く`canonicalizeRows()`（2402行目）は`const out = {...row}`で**元の行の全フィールドをまず複製し**、その後スキーマに定義された既知フィールド（今回は空なので実質何もしない）だけを上書きする。
+
+**結論：`_trace_records`配下の各レコードが持つ未知フィールド（`source_record`・`source_raw_text`を含む）は、入力・正規化の全段階を通じて変更されずに残る。** レビューが指摘した「照合エンジンが未知フィールドや`source_record`を保持するか、正規化時に捨てるか」という分岐点について、**「保持する」側であることをコードで確認した**。これにより、PDF/Excel側の生成パイプラインを一切変更せず、生データに対する後付けの数量抽出ステップを追加できる、という7.1節の見立てが裏付けられた。
+
+#### 7.2.2 候補ペア生成
+
+`candidateEntriesForSys(sysItem, plmList)`（5274行目）が担う。B側件数が閾値（`settings.smallDataThreshold`）以下の小規模データでは、**全A×B総当たり**（候補の絞り込みなし）で処理する。閾値を超える場合は、`buildCandidateIndex()`で構築した転置インデックス（コード・タグ・fuzzy語による索引）を使い、該当しそうなB側行だけに候補を絞り込む。この絞り込みは完全にテキスト・タグベースであり、数量やその他の構造化データは一切関与しない。
+
+`matchPlmParts(sysItem, plmList)`（5378行目）が実際の照合を統括する：候補ごとに`bestMatchForPlm()`（タグ一致があれば`evaluateTagMatch()`優先）でスコアを求め、MLモデルが有効なら確信度を置き換え、`applyFieldGates()`で調整し、`matchLogic.minConfidence`（既定`0.7`）未満を除外し、B側の安定キーで重複排除、`applyHierarchyGate()`で階層フィルタをかけ、最終的にもう一度確信度で足切りする。
+
+#### 7.2.3 スコア構造
+
+`bestMatchForPlm(sysItem, plm)`（4980行目）は、有効な列ペア（`activeKeyPairs()`）ごとに`calcPairMatch(keyword, plm, pair)`（4542行目）を呼び、最良のものを採用する。`calcPairMatch()`は完全一致・コード一致・型番一致・同義語一致・ファジー一致（bigram類似度）・ベクトル一致（tfidfコサイン類似度・トークンJaccard）等、**すべてテキスト類似度に基づく手法**でスコアを出す。数量・単位・充足判定に相当する処理は存在しない。
+
+最終的な照合レコード（`matchPlmParts()`内、5429行目）は次の形：
+
+```js
+{ ...c.plm, matchedKeyword, confidence: c.conf, matchMethod, _features, _matchedSysField, _matchedPlmField, /* +非表示プロパティ */ }
+```
+
+**`{...c.plm, ...}`によりB側行の全フィールドがそのまま照合レコードへスプレッドされる。** これも7.2.1と同じく、B側行に将来`quantity`・`interval_semantics_candidates`等のフィールドがあれば、そのまま照合レコードにも引き継がれることを意味する。また、`confidence`（表示上は「信頼度」列）は本調査で確認した通り**純粋にテキスト一致度のスコアであり、数値要求の充足可否とは無関係**。レビューが懸念した「関連度が高いから要求を満たすという誤解」を避けるには、数量比較の結果をこの`confidence`計算式へ混ぜ込まず、別フィールドとして持たせる設計が、既存コードの構造からも自然である（ユーザー提案の並行レイヤー方式を支持する結果）。
+
+#### 7.2.4 結果の保存・再読込
+
+- 照合結果一覧・トレースマトリクスの行は、内部の`{...c.plm, confidence, ...}`形式とは別に、`A_ID`・`B_表示名`・`信頼度`・`方式`・`根拠`・`レビュー判定`等、**日本語ラベルのフラットな表示用行**（`traceMatrixRows`）へ変換される。
+- **`A_ID`／`B_ID`の解決**：`sysRowId()`（4459行目）→`rowStableId()`（4440行目）を辿ると、`rowStableId()`は候補フィールドの優先順位で「フィールド名を正規化して`traceid`と一致するもの」を最優先で採用する（4444行目・4454行目）。**つまり、元のPDF/Excel照合用JSONに含まれる`trace_id`の値が、そのまま照合エンジンの`A_ID`／`B_ID`として使われる。** レビューが確認を求めていた「`trace_id`同士の対応を保持しているか」は、保持している、と確認できた。
+- **レビュー状態の永続化**：ブラウザの`localStorage`（キー`v11_trace_review_store`、6913〜6917行目）に、`_reviewKey`（`traceReviewKeyFromValues(A_ID, B_ID, category)`で生成）をキーとして保存される。JSONファイルへの直接の書き出しではなく、ブラウザのローカルストレージが一次保存先である点に注意（レビューパッケージとしてエクスポート・インポートする機能も別途存在する`importTraceReviewPackage()`、9733行目、詳細な調査は未実施）。
+- **前回との差分表示**：`normalizeTraceSnapshot()`（6990行目）・`applyTraceDiff()`（6997行目）が、`A_ID`＋`B_ID`＋分類から求めたキーで前回スナップショットと突き合わせ、「新規」「変更」「変化なし」「消滅」を判定する。この差分判定は「分類」「方式」「信頼度」の3項目だけを見ており、将来`quantity_comparison`のような新フィールドを追加しても、既存の差分ロジックはそのフィールドの変化を検知しない（表示上の差分機能を拡張したい場合は別途対応が必要）。
+- **簡易版（`json_ab_trace_matching_tool_lite_v1.5.html`）との関係**：`tools/README.md`の記載によれば、簡易版は「フル版と同じ自動照合エンジン（信頼度ルールは既定値で内部固定、UIでの編集は不可）」を維持しているとされる。この記載を確認根拠としており、簡易版のコードそのものは今回読んでいない。
+
+#### 7.2.5 この調査から導かれる設計方針
+
+ユーザー提案の並行レイヤー方式（`trace-comparison/1.0`を独立したレコードとし、既存のA/B trace recordを変更しない）は、次の3つの事実によって具体的に裏付けられる。
+
+1. 入力正規化は未知フィールドを保持する（7.2.1）ため、既存レコードへ後付けでフィールドを追加しても壊れない。
+2. 照合レコードもB側の全フィールドをスプレッドする（7.2.3）ため、後付けフィールドは照合結果にも自然に伝播する。
+3. `trace_id`が`A_ID`／`B_ID`として一貫して使われる（7.2.4）ため、`requirement_trace_id`／`actual_trace_id`で独立レコードを引き当てる設計が、既存の照合結果とも整合する。
+
+一方で、次の点は既存コードへの追加対応が必要になる（未着手）。
+- 差分表示（`applyTraceDiff()`）は「分類」「方式」「信頼度」の3項目しか見ておらず、`quantity_comparison`の変化を検知しない。
+- 照合結果一覧・トレースマトリクスのUI（`traceMatrixRows`等の日本語ラベル行）に、数量比較結果を表示する列を追加するには、別途UI改修が要る。
+- レビュー状態の永続化は`localStorage`が一次的であり、`quantity_comparison`のreview状態をどこに persist するか（既存の`_reviewKey`と同じ仕組みに相乗りするか、別のキー空間にするか）は未検討。
 
 ## 8. プロトタイプから本体へ移植する関数一覧
 
