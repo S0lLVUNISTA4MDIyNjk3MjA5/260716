@@ -1,0 +1,217 @@
+{
+  "reqRec": {
+    "source_text": "12 kW",
+    "normalized_text": "12 kW",
+    "quantity": {
+      "kind": "interval",
+      "lower": {
+        "value": 12,
+        "inclusive": true
+      },
+      "upper": null
+    },
+    "unit": {
+      "source": "kW",
+      "canonical": "kW",
+      "dimension": "power",
+      "standard_ref": {
+        "standard": "JIS Z 8000-4",
+        "category": "mechanics"
+      }
+    },
+    "context": {
+      "property": null,
+      "subject": null,
+      "state": null,
+      "tokens": []
+    },
+    "extraction": {
+      "confidence": 0.95,
+      "warnings": []
+    },
+    "condition_candidates": [
+      {
+        "source_text": "50 °C",
+        "quantity": {
+          "kind": "interval",
+          "lower": {
+            "value": 50,
+            "inclusive": true
+          },
+          "upper": {
+            "value": 50,
+            "inclusive": true
+          }
+        },
+        "unit": {
+          "source": "°C",
+          "canonical": "degC",
+          "dimension": "temperature",
+          "standard_ref": {
+            "standard": "JIS Z 8000-5",
+            "category": "thermodynamics"
+          }
+        },
+        "confidence": 0.7
+      }
+    ]
+  },
+  "actRec": {
+    "source_text": "12.5 kW",
+    "normalized_text": "12.5 kW",
+    "quantity": {
+      "kind": "interval",
+      "lower": {
+        "value": 12.5,
+        "inclusive": true
+      },
+      "upper": {
+        "value": 12.5,
+        "inclusive": true
+      }
+    },
+    "unit": {
+      "source": "kW",
+      "canonical": "kW",
+      "dimension": "power",
+      "standard_ref": {
+        "standard": "JIS Z 8000-4",
+        "category": "mechanics"
+      }
+    },
+    "context": {
+      "property": null,
+      "subject": null,
+      "state": null,
+      "tokens": []
+    },
+    "extraction": {
+      "confidence": 0.95,
+      "warnings": []
+    },
+    "condition_candidates": [
+      {
+        "source_text": "50 °C",
+        "quantity": {
+          "kind": "interval",
+          "lower": {
+            "value": 50,
+            "inclusive": true
+          },
+          "upper": {
+            "value": 50,
+            "inclusive": true
+          }
+        },
+        "unit": {
+          "source": "°C",
+          "canonical": "degC",
+          "dimension": "temperature",
+          "standard_ref": {
+            "standard": "JIS Z 8000-5",
+            "category": "thermodynamics"
+          }
+        },
+        "confidence": 0.7
+      }
+    ]
+  },
+  "reqCands": [
+    {
+      "value": "acceptable_region",
+      "confidence": 0.6,
+      "evidence": [
+        {
+          "type": "keyword",
+          "value": "acceptable_region",
+          "source_text": "周囲温度50 °Cにおいて、冷房能力12 kW以上を確保すること。",
+          "effect": "supports",
+          "weight": 0.45
+        },
+        {
+          "type": "quantity_shape",
+          "value": "acceptable_region",
+          "source_text": "周囲温度50 °Cにおいて、冷房能力12 kW以上を確保すること。",
+          "effect": "supports",
+          "weight": 0.15
+        }
+      ]
+    },
+    {
+      "value": "unknown",
+      "confidence": 0.15,
+      "evidence": [
+        {
+          "type": "baseline",
+          "value": "unknown",
+          "source_text": "(既定の受け皿。他候補が弱い場合の下限)",
+          "effect": "supports",
+          "weight": 0.15
+        }
+      ]
+    }
+  ],
+  "actCands": [
+    {
+      "value": "achieved_point",
+      "confidence": 0.75,
+      "evidence": [
+        {
+          "type": "quantity_shape",
+          "value": "achieved_point",
+          "source_text": "周囲温度50 °Cで実測12.5 kW",
+          "effect": "supports",
+          "weight": 0.3
+        },
+        {
+          "type": "column_role",
+          "value": "achieved_point",
+          "source_text": "周囲温度50 °Cで実測12.5 kW",
+          "effect": "supports",
+          "weight": 0.05
+        },
+        {
+          "type": "keyword",
+          "value": "achieved_point",
+          "source_text": "周囲温度50 °Cで実測12.5 kW",
+          "effect": "supports",
+          "weight": 0.4
+        }
+      ]
+    },
+    {
+      "value": "unknown",
+      "confidence": 0.15,
+      "evidence": [
+        {
+          "type": "baseline",
+          "value": "unknown",
+          "source_text": "(既定の受け皿。他候補が弱い場合の下限)",
+          "effect": "supports",
+          "weight": 0.15
+        }
+      ]
+    }
+  ],
+  "modeCandidate": {
+    "value": "point_in_region",
+    "confidence": 0.6,
+    "derived_from": {
+      "requirement_semantics": "acceptable_region",
+      "actual_semantics": "achieved_point"
+    },
+    "confirmed": false
+  },
+  "evalResult": {
+    "applicable": true,
+    "reasons": [
+      "comparison_mode確信度0.60が閾値0.4以上",
+      "要求側候補の差0.45が閾値0.2以上",
+      "実仕様側候補の差0.60が閾値0.2以上",
+      "否定根拠なし",
+      "抽出警告なし",
+      "設計特性の対応確信度0.90が閾値0.7以上"
+    ],
+    "fail_reasons": []
+  }
+}
