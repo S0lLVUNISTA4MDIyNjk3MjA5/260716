@@ -91,7 +91,9 @@ v2.9〜v2.19の7回の外部レビュー往復・2種類の摂動テスト（5,6
 - この「照合用JSON」の各レコードは、`{id, trace_id, trace_title, trace_text, trace_key_text, chapter_number, chapter_title, section_number, section_title, source_raw_text, content_hash, ...}`のような章・節単位の構造化テキスト情報を持つ。**`quantity`・`interval_semantics_candidates`・`comparisonMode`に相当するフィールドは、現状の本体スキーマには一切存在しない**。
 - `json_ab_trace_matching_tool_v12.1.15.html`（12,355行）は、テキスト・タグベースの照合（信頼度スコアリング、ナレッジグラフ、トレースマトリクス）を行っており、数値の充足判定（`coverageGap()`相当の機能）は行っていない。
 
-**この調査から言えること**：本体統合は「既存の数値比較フックに新ロジックを差し込む」作業ではなく、「本体のtrace record（chapter-section-trace-v1形式）に、数量・意味候補・比較結果を表す新しいフィールド群を追加する」設計作業になる。ユーザー提案の`schema_version: "trace-comparison/1.0"`は、既存の`chapter-section-trace-v1`とは別レイヤーの追加スキーマとして設計するか、`chapter-section-trace-v1`自体を拡張するかの判断が必要（この判断はまだ行っていない）。
+**この調査から言えること**：本体統合は「既存の数値比較フックに新ロジックを差し込む」作業ではなく、「本体のtrace record（chapter-section-trace-v1形式）とは別に、数量・意味候補・比較結果を表す新しいレコード群を追加する」設計作業になる。
+
+> **判断確定（`trace_comparison_schema_v1.md`）**：ユーザー提案の`schema_version: "trace-comparison/1.0"`は、既存の`chapter-section-trace-v1`とは別レイヤーの独立したsidecarファイルとして設計することに決定した（`chapter-section-trace-v1`自体の拡張は採用しない）。理由・詳細なフィールド定義・具体例は`tools/design_notes/trace_comparison_schema_v1.md`を参照。
 
 ### 7.1 Excel側の照合用JSON調査（完了）
 
