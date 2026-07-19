@@ -115,12 +115,13 @@ PDF側（`makeTraceRecord()`、2228行目）もほぼ同型で、`source_raw_tex
 2. **一方で、PDF側・Excel側ともに、元の生データを（`source_record`／`source_raw_text`として）レコードに保持している。** これは、既存のJSON生成パイプライン自体を改修しなくても、**この生データに対して`extractQuantities()`等を後から適用する後処理ステップを追加できる**ことを意味する。既存の`buildTraceOutput()`・`makeTraceRecord()`のフィールド構成を変更・追加する改修（リスクが本体全体に及ぶ）と、既存の出力へ外付けで新フィールドを付加する改修（リスクが局所化できる）の2通りの設計が考えられ、後者の方が既存機能への影響が小さい可能性が高い（ただし実際の改修コストの見積もりはまだ行っていない）。
 
 **未実施の調査（次工程で必要）**：
-- 実際に`spec_to_json_conversion_tool`・`excel_to_json_conversion_tool`を（ブラウザ上で）動かして、リアルな照合用JSON出力例を1件取得すること（本資料のNode.js実行環境では、ブラウザ依存のこれらのHTMLツールを直接実行できないため未取得。ただし、下記7.2節のコード直読みにより、出力の「形」自体はブラウザ実行なしでも高い確度で確認できた）。
-- ユーザー提案の`trace-comparison/1.0`の正式スキーマ設計（7.2節を踏まえた、後付け方式か拡張方式かの判断を含む）。
+- ユーザー提案の`trace-comparison/1.0`の正式スキーマ設計（7.2節・7.3節を踏まえた、後付け方式か拡張方式かの判断を含む）。
+
+> **補足（7.3節で一部実施）**：「実際に`spec_to_json_conversion_tool`・`excel_to_json_conversion_tool`を動かしてリアルな出力を取得する」こと自体は、別セッションの`samples/hvac_trace_sample_small/verification_report.md`（2026-07-17付）で既に実施・検証済みだったため、本セッションでは新規のPDF/Excel生成は行わず、その検証済みサンプルを再利用した（7.3節）。したがって「未実施」なのは、そのサンプルを使った**照合エンジンの実行検証**ではなく、あくまで`trace-comparison/1.0`の正式スキーマ設計のみである。
 
 ### 7.2 照合エンジン（json_ab_trace_matching_tool_v12.1.15.html）の調査（完了）
 
-ユーザー指定の4段階（入力・正規化／候補ペア生成／スコア構造／結果の保存・再読込）に沿って、実際のコードを読んで確認した。すべて実行はせず、静的にコードを読んだ結果である。
+ユーザー指定の4段階（入力・正規化／候補ペア生成／スコア構造／結果の保存・再読込）に沿って、実際のコードを読んで確認した。**本節自体はすべて実行はせず、静的にコードを読んだ結果である**（実ブラウザでの裏取りは7.3節を参照。7.3節で1件、本節の結論を訂正している）。
 
 #### 7.2.1 入力・正規化
 
@@ -162,7 +163,9 @@ adaptDocumentJsonToTraceRecords()  // 2613行目：文書JSON(sections配列等)
 #### 7.2.4 結果の保存・再読込
 
 - 照合結果一覧・トレースマトリクスの行は、内部の`{...c.plm, confidence, ...}`形式とは別に、`A_ID`・`B_表示名`・`信頼度`・`方式`・`根拠`・`レビュー判定`等、**日本語ラベルのフラットな表示用行**（`traceMatrixRows`）へ変換される。
-- **`A_ID`／`B_ID`の解決**：`sysRowId()`（4459行目）→`rowStableId()`（4440行目）を辿ると、`rowStableId()`は候補フィールドの優先順位で「フィールド名を正規化して`traceid`と一致するもの」を最優先で採用する（4444行目・4454行目）。**つまり、元のPDF/Excel照合用JSONに含まれる`trace_id`の値が、そのまま照合エンジンの`A_ID`／`B_ID`として使われる。** レビューが確認を求めていた「`trace_id`同士の対応を保持しているか」は、保持している、と確認できた。
+- **`A_ID`／`B_ID`の解決**：`sysRowId()`（4459行目）→`rowStableId()`（4440行目）を辿ると、`rowStableId()`は候補フィールドの優先順位で「フィールド名を正規化して`traceid`と一致するもの」を最優先で採用する（4444行目・4454行目）。A側（`sysRowId()`）はこの`rowStableId()`を直接呼ぶため、**元のPDF側`trace_id`の値がそのまま`A_ID`として使われる。**
+
+  > **訂正（`runtime_fixtures/runtime_verification.md`で判明）**：上記の「`trace_id`同士の対応を保持している」という結論は、B側（`B_ID`）には当てはまらないことを実ブラウザ実行で確認した。B側は`plmUniqueKey()`→`plmBusinessKey()`が`plmCode`／有効なコード列／`plmText`等の項目を`rowStableId()`のtrace_id優先ロジックより**先に**試すため、実行結果では`B_ID`が`"5"`〜`"9"`のような`source_row`風の値になり、B側`trace_id`（`"design-use-temperature"`等）とは一致しなかった。**したがって`trace_id`同士の対応は保持されているとは言えない。** sidecarスキーマの`actual_trace_id`は、照合エンジンが表示する`B_ID`ではなく、B側レコード自身が持つ`trace_id`フィールドを直接参照して引き当てる設計にする必要がある。
 - **レビュー状態の永続化**：ブラウザの`localStorage`（キー`v11_trace_review_store`、6913〜6917行目）に、`_reviewKey`（`traceReviewKeyFromValues(A_ID, B_ID, category)`で生成）をキーとして保存される。JSONファイルへの直接の書き出しではなく、ブラウザのローカルストレージが一次保存先である点に注意（レビューパッケージとしてエクスポート・インポートする機能も別途存在する`importTraceReviewPackage()`、9733行目、詳細な調査は未実施）。
 - **前回との差分表示**：`normalizeTraceSnapshot()`（6990行目）・`applyTraceDiff()`（6997行目）が、`A_ID`＋`B_ID`＋分類から求めたキーで前回スナップショットと突き合わせ、「新規」「変更」「変化なし」「消滅」を判定する。この差分判定は「分類」「方式」「信頼度」の3項目だけを見ており、将来`quantity_comparison`のような新フィールドを追加しても、既存の差分ロジックはそのフィールドの変化を検知しない（表示上の差分機能を拡張したい場合は別途対応が必要）。
 - **簡易版（`json_ab_trace_matching_tool_lite_v1.5.html`）との関係**：`tools/README.md`の記載によれば、簡易版は「フル版と同じ自動照合エンジン（信頼度ルールは既定値で内部固定、UIでの編集は不可）」を維持しているとされる。この記載を確認根拠としており、簡易版のコードそのものは今回読んでいない。
@@ -171,14 +174,34 @@ adaptDocumentJsonToTraceRecords()  // 2613行目：文書JSON(sections配列等)
 
 ユーザー提案の並行レイヤー方式（`trace-comparison/1.0`を独立したレコードとし、既存のA/B trace recordを変更しない）は、次の3つの事実によって具体的に裏付けられる。
 
-1. 入力正規化は未知フィールドを保持する（7.2.1）ため、既存レコードへ後付けでフィールドを追加しても壊れない。
-2. 照合レコードもB側の全フィールドをスプレッドする（7.2.3）ため、後付けフィールドは照合結果にも自然に伝播する。
-3. `trace_id`が`A_ID`／`B_ID`として一貫して使われる（7.2.4）ため、`requirement_trace_id`／`actual_trace_id`で独立レコードを引き当てる設計が、既存の照合結果とも整合する。
+1. 入力正規化は未知フィールドを保持する（7.2.1）ため、既存レコードへ後付けでフィールドを追加しても壊れない。実ブラウザ実行でも、合成フィールド（`quantity_analysis`）が正規化・照合・エクスポートの全段階を通じて欠落しないことを確認した（`runtime_fixtures/runtime_verification.md` §3.3）。
+2. 照合レコードもB側の全フィールドをスプレッドする（7.2.3）ため、後付けフィールドは照合結果にも自然に伝播する（同上で確認）。
+3. ~~`trace_id`が`A_ID`／`B_ID`として一貫して使われる（7.2.4）~~ → **上記の訂正の通り、A側は`trace_id`と一致するがB側（`B_ID`）は一致しない。** そのため`requirement_trace_id`（A側）は既存の`A_ID`とみなせるが、`actual_trace_id`（B側）は照合エンジンの`B_ID`に頼らず、B側レコード自身の`trace_id`フィールドを直接引き当てる設計にする。
 
 一方で、次の点は既存コードへの追加対応が必要になる（未着手）。
 - 差分表示（`applyTraceDiff()`）は「分類」「方式」「信頼度」の3項目しか見ておらず、`quantity_comparison`の変化を検知しない。
 - 照合結果一覧・トレースマトリクスのUI（`traceMatrixRows`等の日本語ラベル行）に、数量比較結果を表示する列を追加するには、別途UI改修が要る。
 - レビュー状態の永続化は`localStorage`が一次的であり、`quantity_comparison`のreview状態をどこに persist するか（既存の`_reviewKey`と同じ仕組みに相乗りするか、別のキー空間にするか）は未検討。
+- **配列選択リスク（新規、実ブラウザ実行で確認）**：`findRecordArrays()`／`arrayScoreForSchema()`は`INPUT_FIELD_SCHEMAS.sys/plm.fields`が空オブジェクトのため意味的な判定を行わず、実質「JSON内で最大の配列を選ぶ」動作になっている。B側レコード内に`_trace_records`（実データでは5件）より要素数の多いネスト配列が存在すると、そちらが誤って選択されデータソースが丸ごと入れ替わることを閾値実験で確認した（trapSize 5以下は安全、6以上でハイジャック。`runtime_fixtures/array_selection_risk_results.json`）。**したがって、sidecarの候補配列（例：`interval_semantics_candidates`のような複数候補を持つフィールド）をB側レコードの直下に生の配列として埋め込む設計は避けるべきで、オブジェクト内にネストする（配列を最上位から一段隠す）か、別ファイル・別キー空間として扱う必要がある。**
+
+### 7.3 実ブラウザ出力による検証（完了、一部制約あり）
+
+7.2節までの調査はすべて静的なコード読解によるものだったため、Playwright（CDNライブラリはローカルのnpmパッケージへ差し替えて読み込む手法。手法自体は`samples/hvac_trace_sample_small/verification_report.md`が先行して確立していたものを再利用）を使い、`json_ab_trace_matching_tool_v12.1.15.html`を実際にブラウザで実行して裏取りを行った。詳細な手順・全結果は`tools/design_notes/runtime_fixtures/runtime_verification.md`に記録している。
+
+**スコープ上の判断**：PDF/Excel側の新規出力生成はこのセッションでは行わず、既に検証済みの`samples/hvac_trace_sample_small/JSON_A_customer_requirements_trace.json`／`JSON_B_design_review_trace.json`を入力として再利用した（理由は上記7.1節末尾の補足を参照）。したがって、本節の検証範囲は**照合エンジン側の実行時挙動**に限られ、PDF/Excel生成ツール自体の実ブラウザ出力の再検証は含まない。
+
+確認できたこと：
+1. **未知フィールドの生存**：B側レコードへ注入した合成フィールド`quantity_analysis`と、元々の`source_record`は、いずれも正規化・照合・エクスポート（`mergedResult.plmList`）の全段階で欠落せず残ることを確認した（7.2.1・7.2.3の静的解析を裏付ける）。
+2. **配列選択リスク（新規）**：`_trace_records`より要素数の多いネスト配列がB側レコード内に存在すると、照合エンジンのデータソース選択がそちらへ完全にハイジャックされることを、しきい値実験（trapSize 0/4/5/6/10/50/200）で確認した。実データ件数（5件）に対し、trapSize 5以下は安全、6以上でハイジャックという正確な境界を確認した（`array_selection_risk_results.json`）。
+3. **B_IDの訂正（重要）**：A_IDはA側`trace_id`と一致するが、**B_IDはB側`trace_id`と一致しない**（`plmBusinessKey()`が`trace_id`優先ロジックより先に他項目を試すため）。7.2.4節の該当箇所を訂正済み。
+4. **レビューパッケージの構造**：`window.exportTraceReviewPackage()`の実出力を確認した（キー: `schemaVersion`/`tool`/`exportedAt`/`profile`/`reviews`/`manualRelations`/`replacements`/`trainingFeedback`/`traceSnapshot`/`resultMode`/`mlFeatureVersion`/`datasetSignature`/`overviewScopeDecisions`/`phase7Version`）。
+
+**未確認のまま残った点（今回の検証で埋まらなかったギャップ）**：
+- ダウンロードボタン（`#downloadJsonBtn`／`#traceReviewExportBtn`）のクリック→ダウンロードという実際のUI経路そのものは検証できていない。両ボタンとも、タブを開いた後も`disabled`のままだったため、代わりに内部データ（`mergedResult`・`window.exportTraceReviewPackage()`）を`page.evaluate()`経由で直接取得する方法（`samples/hvac_trace_sample_small/verification_report.md`が先行して用いた手法と同じ）で代替した。原因は未特定（ボタンを再バインドする`cloneAndBind()`パターンが影響している可能性はあるが未確認）。
+- レビューパッケージの再取り込み（`importTraceReviewPackage()`）によるレビュー状態の復元は未検証。
+- PDF側`source_raw_text`の生存確認は、今回はExcel側（`source_record`）のみ実施し、PDF側では行っていない。
+
+これらのギャップは`trace-comparison/1.0`の正式スキーマ設計を妨げるものではないが、実装フェーズで解消しておくことが望ましい。
 
 ## 8. プロトタイプから本体へ移植する関数一覧
 
