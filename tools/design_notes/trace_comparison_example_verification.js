@@ -67,13 +67,26 @@ function v12NormalizeEquivalent(value) {
     .split('\n').map(s => s.replace(/[ \t]+$/g, '')).join('\n')
     .replace(/[ \t]+/g, ' ').trim();
 }
-// v12HashParts(namespace, parts)と同一契約: namespace自体も正規化対象に含めて連結する。
-// namespaceを用途ごとに分けることで、同じ入力でも用途(content_hash/quantity_id)が違えば
-// 別の値になるようにする(異なる目的のハッシュが偶然一致することを避ける)。
+// v12HashParts(namespace, parts)(spec_to_json_conversion_tool_v1.18.html 5737行目)と同一契約:
+// [namespace, ...parts.map(v12Normalize)].join(NUL文字)してから1回だけハッシュする。区切り文字は
+// NUL文字であり、スペースではない(前回の修正で誤ってスペース結合にしてしまっていたことが指摘され、
+// 訂正した。固定ベクトルテストで既存v12HashParts()の入力文字列と完全一致することを確認している)。
 function hashParts(namespace, parts) {
-  const canonical = [v12NormalizeEquivalent(namespace), ...parts.map(v12NormalizeEquivalent)].join(' ');
+  const NUL = String.fromCharCode(0);
+  const canonical = [v12NormalizeEquivalent(namespace), ...parts.map(v12NormalizeEquivalent)].join(NUL);
   return crypto.createHash('sha256').update(canonical, 'utf-8').digest('hex');
 }
+// hashParts()の固定ベクトルテスト(レビュー指摘: 区切り文字がNUL文字であることを回帰的に固定する。
+// 過去にスペース結合へ誤って変更してしまったことがあるため、期待値を固定して再発を検出する)。
+check('hashParts("ns",["a","b"])の期待値が固定されている(区切り文字の回帰検出用)',
+  hashParts('ns', ['a', 'b']) === 'a1dbe38eb9cd7c8cf902046d72bf4b934a397188d5da1ec877b45c7862cf9fe7');
+check('part内に空白を含んでいても正しく計算される',
+  hashParts('ns', ['a b']) === '421e15b5415b8b4559fd66ab4ee5eeaa20cf531dbfd26fa6dd1bfcb545bbb736');
+check('["ab","c"]と["a","bc"]が異なるハッシュになる(NUL区切りにより単純結合の曖昧さを回避できていることの検証)',
+  hashParts('ns', ['ab', 'c']) !== hashParts('ns', ['a', 'bc']));
+check('namespaceが異なれば同じpartsでも異なるハッシュになる(用途分離の検証)',
+  hashParts('content-hash-v1', ['x']) !== hashParts('quantity-id-v1', ['x']));
+
 // キーをソートしたJSON文字列化(オブジェクトのプロパティ順に依存しない安定した表現にする)
 function canonicalJson(value) {
   if (Array.isArray(value)) return '[' + value.map(canonicalJson).join(',') + ']';

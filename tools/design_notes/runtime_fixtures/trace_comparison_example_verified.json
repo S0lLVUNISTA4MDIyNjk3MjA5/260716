@@ -1,6 +1,6 @@
 {
   "schema_version": "trace-comparison/1.0-rc1",
-  "generated_at": "2026-07-19T09:51:41.637Z",
+  "generated_at": "2026-07-19T10:02:51.108Z",
   "note": "trace_comparison_example_verification.jsにより実データ(samples/hvac_trace_sample_small/)から機械的に生成・検証済み。relationshipもruntime_fixtures/*.jsonから機械的に解決した(手打ちの値は含まない)。",
   "source": {
     "requirement_file": "JSON_A_customer_requirements_trace.json",
@@ -17,7 +17,7 @@
   "not_analyzed": [],
   "comparisons": [
     {
-      "comparison_id": "req-cooling-capacity::design-cooling-capacity::q-38c7ca477d7aa6f2dc37b031f013d94a::q-ef1d2735ec9e23b703bf09b3ec407814",
+      "comparison_id": "req-cooling-capacity::design-cooling-capacity::q-d877af7681166f129dfa4f6fa4cbd5ca::q-adc7c0a5e1023bd5025e451c725eb983",
       "requirement_ref": {
         "trace_id": "req-cooling-capacity",
         "matcher_id": "req-cooling-capacity"
@@ -27,7 +27,7 @@
         "matcher_id": "6",
         "source_row": 6
       },
-      "quantity_pair_id": "q-38c7ca477d7aa6f2dc37b031f013d94a::q-ef1d2735ec9e23b703bf09b3ec407814",
+      "quantity_pair_id": "q-d877af7681166f129dfa4f6fa4cbd5ca::q-adc7c0a5e1023bd5025e451c725eb983",
       "relationship": {
         "source": "matching_engine",
         "match_method": "tag",
@@ -36,14 +36,14 @@
         "linked_at": null
       },
       "requirement_analysis": {
-        "quantity_id": "q-38c7ca477d7aa6f2dc37b031f013d94a",
+        "quantity_id": "q-d877af7681166f129dfa4f6fa4cbd5ca",
         "source_field": "source_raw_text",
         "occurrence_index": 0,
         "source_span": {
           "start": 18,
           "end": 23
         },
-        "content_hash": "40eab015725d87f8a1f4d0895065319d0b1dc13d075ffee6b2507901f64846be",
+        "content_hash": "7317516c674b1f49070dc4e0d08321e95de1ed3f7e40447783fe32c318db8a24",
         "quantity": {
           "source_text": "12 kW",
           "source_span": {
@@ -146,14 +146,14 @@
         ]
       },
       "actual_analysis": {
-        "quantity_id": "q-ef1d2735ec9e23b703bf09b3ec407814",
+        "quantity_id": "q-adc7c0a5e1023bd5025e451c725eb983",
         "source_field": "検討結果",
         "occurrence_index": 0,
         "source_span": {
           "start": 10,
           "end": 17
         },
-        "content_hash": "df7b2634c48b437a549386fac2c56a1938f8e67e7a62d49fcbd20ca3ce96827d",
+        "content_hash": "9ded8ba4feba1104c74f141478e2be01da981052351ea30cb70d574aff6fc60b",
         "quantity": {
           "source_text": "12.5 kW",
           "source_span": {
