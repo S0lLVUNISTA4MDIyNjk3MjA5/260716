@@ -72,10 +72,26 @@ function v12NormalizeEquivalent(value) {
 // NUL文字であり、スペースではない(前回の修正で誤ってスペース結合にしてしまっていたことが指摘され、
 // 訂正した。固定ベクトルテストで既存v12HashParts()の入力文字列と完全一致することを確認している)。
 function hashParts(namespace, parts) {
+  // v12HashParts(namespace, parts)(spec_to_json_conversion_tool_v1.18.html 5737行目)の実際の実装を
+  // 確認したところ、namespace自体はv12Normalize()を通していない(partsのみ正規化する)。3経路同値
+  // テスト(verify_hash_3paths.js)で、この契約のとおりに実装した場合にNode/crypto.subtle/
+  // 純JSフォールバックの3経路が一致することを確認した。以前はnamespaceも正規化していたが、
+  // 実際のv12HashParts()と異なる契約になっていたため訂正した。
   const NUL = String.fromCharCode(0);
-  const canonical = [v12NormalizeEquivalent(namespace), ...parts.map(v12NormalizeEquivalent)].join(NUL);
+  const canonical = [namespace, ...parts.map(v12NormalizeEquivalent)].join(NUL);
   return crypto.createHash('sha256').update(canonical, 'utf-8').digest('hex');
 }
+// 3経路(Node crypto.createHash / ブラウザcrypto.subtle.digest / 純JSフォールバック
+// v12Sha256Fallback())の同値検証(shadow_mode_integration_design.md §6 回帰テスト27番)。
+// Playwrightでspec_to_json_conversion_tool_v1.18.htmlのv12HashParts()を実際に3経路(通常/
+// crypto.subtle無効化によるフォールバック強制/Node)で実行し、日本語・全角ASCII・CRLF・
+// 連続空白・絵文字を含む11個の固定ベクトルすべてで一致することを確認した
+// (tools/design_notes/runtime_fixtures/hash_3paths_verification.json)。このテストでは、
+// その検証済みの値の1つ(namespace:"content-hash-v1", parts:["a","b"])を、Node側のhashParts()
+// が同じ値を再現することの回帰検出として固定する。
+check('hashParts()がv12HashParts()の3経路検証済みの値と一致する(runtime_fixtures/hash_3paths_verification.json参照)',
+  hashParts('content-hash-v1', ['a', 'b']) === 'cc1701a36bf2db6d63abaa321d08937985a79c1269c053a9c3ae92950f294905');
+
 // hashParts()の固定ベクトルテスト(レビュー指摘: 区切り文字がNUL文字であることを回帰的に固定する。
 // 過去にスペース結合へ誤って変更してしまったことがあるため、期待値を固定して再発を検出する)。
 check('hashParts("ns",["a","b"])の期待値が固定されている(区切り文字の回帰検出用)',
