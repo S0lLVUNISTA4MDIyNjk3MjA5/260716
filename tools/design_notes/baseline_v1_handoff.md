@@ -6,10 +6,14 @@
 
 コードと引き継ぎ資料は別のコミットで追加されたため、2つのSHAを区別して記録する。
 
-- **`code_baseline_sha`**（プロトタイプのコード・テスト・実データコーパスが完成した時点）: `b55b5218cbe4c1b632cadcbf5125511d659a834e`（「Freeze UNIT_DEFS as truly immutable master data (v2.13)」）
-- **`handoff_snapshot_sha`**（この資料・サンプルJSONを含む、資料として参照可能な最終コミット）: 本コミット自身のSHA（`git log -1 --format=%H`で取得。この資料の文中に自身のハッシュ値を埋め込むことはできないため、`git tag baseline-v1`を本コミットへ付与し、`git rev-parse baseline-v1`で解決できるようにする）
+- **`code_baseline_sha`**（プロトタイプのコード・テスト・実データコーパスが完成した時点、以降変更なし）: `b55b5218cbe4c1b632cadcbf5125511d659a834e`（「Freeze UNIT_DEFS as truly immutable master data (v2.13)」）
+- **`handoff_snapshot_sha`**（本資料・サンプルJSONを含む最新のコミット）: 本資料自身のハッシュ値を文中に固定で書くと、この文自体を編集した時点で古くなり矛盾するため、次のコマンドで動的に取得すること。
+  ```bash
+  git log -1 --format=%H -- tools/design_notes/baseline_v1_handoff.md
+  ```
 - **ブランチ**: `claude/pdf-excel-json-overview-pigbne`
-- **確認事項**: この資料を作成した時点で`git status`はクリーン（未コミットの変更なし）。次工程の担当者は、`code_baseline_sha`（またはタグ`baseline-v1`）をチェックアウトすればコードとテストを再現でき、`handoff_snapshot_sha`（＝`baseline-v1`タグ自身）は本資料・サンプルJSONまで含めた完全なスナップショットである。
+- **タグでの固定について**: 当初`baseline-v1`タグを付与しリモートへpushする予定だったが、このセッションの送信先ポリシーにより`git push origin refs/tags/baseline-v1`が`403`で拒否された（ブランチへのpushは許可されているが、タグは対象外の模様。この session特有の制約であり、次工程の担当者の環境では`git tag baseline-v1 <code_baseline_sha>`が普通に通る可能性が高い）。そのため、本資料では上記2つのSHAを直接参照する方式とし、タグへの依存はしていない。
+- **確認事項**: この資料を作成した時点で`git status`はクリーン（未コミットの変更なし）。次工程の担当者は、`code_baseline_sha`をチェックアウトすればコードとテストを再現できる。
 
 ## 2. 動作確認済み環境
 
