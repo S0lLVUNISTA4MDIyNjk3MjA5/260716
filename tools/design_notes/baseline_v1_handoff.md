@@ -93,7 +93,9 @@ v2.9〜v2.19の7回の外部レビュー往復・2種類の摂動テスト（5,6
 
 **この調査から言えること**：本体統合は「既存の数値比較フックに新ロジックを差し込む」作業ではなく、「本体のtrace record（chapter-section-trace-v1形式）とは別に、数量・意味候補・比較結果を表す新しいレコード群を追加する」設計作業になる。
 
-> **判断確定（`trace_comparison_schema_v1.md`）**：ユーザー提案の`schema_version: "trace-comparison/1.0"`は、既存の`chapter-section-trace-v1`とは別レイヤーの独立したsidecarファイルとして設計することに決定した（`chapter-section-trace-v1`自体の拡張は採用しない）。理由・詳細なフィールド定義・具体例は`tools/design_notes/trace_comparison_schema_v1.md`を参照。
+> **判断確定（`trace_comparison_schema_v1.md`）**：ユーザー提案の`schema_version: "trace-comparison/1.0"`は、既存の`chapter-section-trace-v1`とは別レイヤーの独立したsidecarファイルとして設計することに決定した（`chapter-section-trace-v1`自体の拡張は採用しない）。理由・詳細なフィールド定義・具体例は`tools/design_notes/trace_comparison_schema_v1.md`（現在`-rc1`、必須修正が残っているため正式版ではない）を参照。本体3ツールへの具体的な挿入点は`tools/design_notes/shadow_mode_integration_design.md`を参照。
+>
+> **訂正**：コミット`22c5e24`の説明で、本資料（`baseline_v1_handoff.md`）も更新した旨を示唆する記載があったが、実際に変更されたのは新設の`shadow_mode_integration_design.md`と`trace_comparison_schema_v1.md`の2ファイルのみで、本資料は当時未更新だった（レビュー指摘により本コミットで訂正・pointer追加）。
 
 ### 7.1 Excel側の照合用JSON調査（完了）
 
