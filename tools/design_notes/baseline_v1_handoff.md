@@ -89,7 +89,9 @@ v2.9〜v2.19の7回の外部レビュー往復・2種類の摂動テスト（5,6
 **現状、本体には未統合**。`tools/`直下の4つの単体HTMLツール（`spec_to_json_conversion_tool_v1.18.html`・`excel_to_json_conversion_tool_v2.0.8.html`・`json_ab_trace_matching_tool_v12.1.15.html`・`json_ab_trace_matching_tool_lite_v1.5.html`、計31,752行）が実際に稼働している本体であり、`tools/design_notes/`配下のプロトタイプ群とは完全に独立したコードベースである。
 
 調査した範囲で分かったこと：
-- `spec_to_json_conversion_tool_v1.18.html`は、PDF→「通常文書JSON」（DocumentModel 2.0形式）への変換に加え、`json_ab_trace_matching_tool`向けの「照合用JSON」（フォーマット名`chapter-section-trace-v1`）を出力する機能を持つ（該当コード: 同ファイル`makeTraceRecord()`・`buildTraceRecords()`、2228行目以降）。
+- `spec_to_json_conversion_tool_v1.18.html`は、PDF→「通常文書JSON」（DocumentModel 2.0形式）への変換に加え、`json_ab_trace_matching_tool`向けの「照合用JSON」（フォーマット名`chapter-section-trace-v1`）を出力する機能を持つ。
+
+> **訂正（フェーズA着手時、実ブラウザ実行で判明）**：当初`makeTraceRecord()`・`buildTraceRecords()`・`buildTraceExport()`（2228〜2497行目）が現行の生成コードだと記載していたが、これらは**実際には呼ばれないコード**（`#btn-trace-export`のクリックハンドラが`exportTraceJson`から`v12ExportTraceSide`へ後から`.onclick=`で上書きされている）だったことを、実際にPlaywrightでページを開き`$("#btn-trace-export").onclick.toString()`を確認して発見した。ファイル内に`/* 関数名：Phase 6統合実装へ移行 */`という注記が複数箇所にあり、このファイルが「Phase 6」と呼ばれる大規模な後続改修を経ていることを示していた。**現行の生成コードは`v12BuildTrace()`（6392行目）・`v12TraceRecordsFromModel()`（6368行目）・`v12ExportTraceSide()`（6396行目）である。** 出力するレコードの主要フィールド（`trace_id`・`source_raw_text`・`tags`等）は同型のまま維持されているため、7.1節の実データを使った検証結果自体への影響はない。
 - この「照合用JSON」の各レコードは、`{id, trace_id, trace_title, trace_text, trace_key_text, chapter_number, chapter_title, section_number, section_title, source_raw_text, content_hash, ...}`のような章・節単位の構造化テキスト情報を持つ。**`quantity`・`interval_semantics_candidates`・`comparisonMode`に相当するフィールドは、現状の本体スキーマには一切存在しない**。
 - `json_ab_trace_matching_tool_v12.1.15.html`（12,355行）は、テキスト・タグベースの照合（信頼度スコアリング、ナレッジグラフ、トレースマトリクス）を行っており、数値の充足判定（`coverageGap()`相当の機能）は行っていない。
 
@@ -116,11 +118,11 @@ Excel側は`excel-row-trace-v1`形式で、Excelの1行を1レコードとする
 }
 ```
 
-PDF側（`makeTraceRecord()`、2228行目）もほぼ同型で、`source_raw_text: rawText`という形で元のテキストを丸ごと保持している。
+PDF側（現行実装は`v12TraceRecordsFromModel()`、6368行目。上記訂正参照）もほぼ同型で、`source_raw_text: String(text??"")`という形で元のテキストを丸ごと保持している。
 
 **PDF側・Excel側で共通して確認できた、統合設計上重要な事実**：
 1. **PDF側・Excel側ともに、`quantity`・単位・数量意味候補に相当するフィールドは一切存在しない。** 両方とも「テキストをどう寄せ集めて1レコードの`trace_text`にするか」という粒度の設計であり、数値比較の概念は最初から入っていない。
-2. **一方で、PDF側・Excel側ともに、元の生データを（`source_record`／`source_raw_text`として）レコードに保持している。** これは、既存のJSON生成パイプライン自体を改修しなくても、**この生データに対して`extractQuantities()`等を後から適用する後処理ステップを追加できる**ことを意味する。既存の`buildTraceOutput()`・`makeTraceRecord()`のフィールド構成を変更・追加する改修（リスクが本体全体に及ぶ）と、既存の出力へ外付けで新フィールドを付加する改修（リスクが局所化できる）の2通りの設計が考えられ、後者の方が既存機能への影響が小さい可能性が高い（ただし実際の改修コストの見積もりはまだ行っていない）。
+2. **一方で、PDF側・Excel側ともに、元の生データを（`source_record`／`source_raw_text`として）レコードに保持している。** これは、既存のJSON生成パイプライン自体を改修しなくても、**この生データに対して`extractQuantities()`等を後から適用する後処理ステップを追加できる**ことを意味する。既存の`buildTraceOutput()`・`v12TraceRecordsFromModel()`のフィールド構成を変更・追加する改修（リスクが本体全体に及ぶ）と、既存の出力へ外付けで新フィールドを付加する改修（リスクが局所化できる）の2通りの設計が考えられ、後者の方が既存機能への影響が小さい可能性が高い（ただし実際の改修コストの見積もりはまだ行っていない）。
 
 **未実施の調査（次工程で必要）**：
 - ユーザー提案の`trace-comparison/1.0`の正式スキーマ設計（7.2節・7.3節を踏まえた、後付け方式か拡張方式かの判断を含む）。

@@ -91,10 +91,12 @@ quantity_id = "q-" + sha256([trace_id, source_field, source_span.start, source_s
 
 ### 2.2 PDF側（`spec_to_json_conversion_tool_v1.18.html`）
 
-- 既存の生成関数：`buildTraceExport(obj, profile, adapterSide)`（2396行目）が`{..., _trace_records: built.records}`を組み立て、`downloadTraceJsonObject(obj, filename)`（2438行目）でダウンロードする。この2つの関数は**変更しない**。
-- 新設する関数（案）：`buildQuantityAnnotationSidecar(traceExport)` — `traceExport._trace_records`を読み取り専用の入力として受け取り、各レコードの`source_raw_text`に対して`extractQuantities()`を適用し、2.0節の`quantity_id`規則で`analyses[]`を組み立てる。
-- 呼び出し位置：新しい別ボタン（例：`downloadQuantityAnnotationBtn`）のハンドラ内で`buildQuantityAnnotationSidecar(buildTraceExport(...))`を呼ぶ。
-- **推奨修正「再実行の同一性保証」への対応**：この設計は、直前に`downloadTraceJsonBtn`でダウンロードした`_trace_records`と、`buildQuantityAnnotationSidecar()`が読む`_trace_records`が同一であることを前提にする。`buildTraceExport()`自体に非決定的な要素（現在時刻由来の`generated_at`以外）がないことをコードレベルで確認する必要がある（未実施、9節のテスト項目に追加）。同一性が保証できない場合は、2つのボタンを1回の生成結果から両方書き出す単一ボタン（`_trace_records`と数量注釈を同時にダウンロードする）に設計変更する。
+> **訂正（フェーズA着手時、実ブラウザ実行で判明）**：当初この節は`buildTraceExport(obj, profile, adapterSide)`（2396行目）・`downloadTraceJsonObject(obj, filename)`（2438行目）を現行の生成関数として記載していたが、これらは実際にはUIから呼ばれないコードだった（`#btn-trace-export`のクリックハンドラが後から`v12ExportTraceSide`へ上書きされている。ファイル内の`/* 関数名：Phase 6統合実装へ移行 */`という注記群が、大規模な後続改修（「Phase 6」）の存在を示していた）。Playwrightで`$("#btn-trace-export").onclick.toString()`を確認して発見した（`baseline_v1_handoff.md` §7参照）。以下は現行の生成コードを前提に書き直した。
+
+- 既存の生成関数：`v12BuildTrace(obj, profile, side)`（6392行目）が`v12TraceRecordsFromModel(model, side)`（6368行目）を呼んで`{..., _trace_records: records}`を組み立てる。呼び出し元の`v12ExportTraceSide(obj, profile, side, label)`（6396行目）が`v12DownloadJson(trace, ...)`でダウンロードする。**これらの関数は変更しない**。
+- 新設する関数（案）：`buildQuantityAnnotationSidecar(trace)` — `trace._trace_records`を読み取り専用の入力として受け取り、各レコードの`source_raw_text`に対して`extractQuantities()`を適用し、2.0節の`quantity_id`規則で`analyses[]`を組み立てる。
+- 呼び出し位置：`v12ExportTraceSide()`内、`v12BuildTrace()`の戻り値（`trace`変数）を使って`v12DownloadJson(trace, ...)`を呼んだのと**同じ`trace`オブジェクト**を使い、新しい別ボタン（例：`downloadQuantityAnnotationBtn`）のハンドラ内で`buildQuantityAnnotationSidecar(trace)`を呼ぶ（`v12BuildTrace()`を2回呼ばない。これにより「元trace JSONとsidecarは同一スナップショットから生成する」という条件を構造的に満たす）。
+- **同一性保証**：`v12BuildTrace()`は`generated_at`（現在時刻）以外に非決定的な要素を持たない（`v12BuildDocumentModel()`の結果に依存するが、これは編集中の`data`状態を読むだけの純粋な変換）。同一クリック操作内で1回だけ呼び出し、その戻り値を両方の生成物（trace JSON本体・数量注釈sidecar）で共有する設計であれば、再実行による不一致の懸念自体が生じない。
 
 ### 2.3 Excel側（`excel_to_json_conversion_tool_v2.0.8.html`）— 列の役割候補生成（必須修正5・再指摘への対応）
 
