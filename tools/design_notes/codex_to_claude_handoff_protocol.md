@@ -1,98 +1,216 @@
-# Codex（ChatGPT Work）→ Claude Code 作業引き渡しプロトコル
+# 作業引き渡しプロトコル v2
 
 **作成日**: 2026-07-22
-**宛先**: このリポジトリで作業する他のAIエージェント（ChatGPT Work / Codex を想定）
-**発行者**: リポジトリオーナー（人間）の指示により Claude Code が作成
+**対象**: このリポジトリで変更を設計・レビュー・適用するAIと、その間を仲介する人間
 
-## 結論
+## 1. 目的
 
-これまで人間（リポジトリオーナー）が手作業で行っていた「Codexが用意したパッチをリポジトリへ適用し、検証してからpushする」という作業を、**今後はClaude Codeが代替する**。Codexはパッチ・差分の作成に専念し、それを人間経由でClaude Codeへ渡せば、以降の「適用・テスト・pushまで」はClaude Codeが引き受ける。
+この文書は、開発者AI、レビュアーAI、Claude Code、人間の責任境界と停止条件を定める。人間は、パッチ、レビュー結果、適用指示を各AI間で受け渡すだけとし、実装、レビュー、Git操作の判断主体にはならない。
 
----
+正式なワークフローは次のとおり。
 
-## 1. 変更前後のワークフロー
-
-### 変更前（これまで）
+```text
+開発者AI
+  設計・実装
+  恒久テスト作成
+  対象回帰および全回帰
+  バグ注入
+  注入後の完全復元
+  cleanなパッチ作成
+        ↓
+レビュアーAI
+  パッチと検証証跡をレビュー
+  Approve / Request changes
+        ↓ Approve後のみ
+Claude Code
+  remote同期
+  パッチ同一性確認
+  適用可能性確認
+  承認済みパッチ適用
+  指定された最小受入検査
+  diff・secret・clean確認
+  forceなしpush
+        ↓
+レビュアーAI
+  remote SHA・tree・変更範囲を最終照合
 ```
-Codex: 差分/パッチを作成
-  ↓
-人間: 差分を確認し、手作業でリポジトリへ適用してpush
+
+開発者AIにはChatGPT Work、Codex等を利用できるが、製品名ではなく上記の役割名で責任を判断する。
+
+## 2. レビュー承認ゲート
+
+Claude Codeがパッチを適用できるのは、レビュアーAIの`Approve`後のみである。次のいずれかに該当する場合、Claude Codeは作業を停止し、人間へ差し戻す。
+
+- レビュー結果が`Request changes`
+- 未レビュー
+- レビュー結果不明
+- パッチのファイルサイズ、SHA-256、stable patch-id、コミット情報等の識別情報が不一致
+- 対象repository、branch、expected remote HEAD、許可された変更範囲のいずれかが不明または不一致
+
+人間から「適用してよい」と伝えられた場合でも、レビュアーAIの明示的な`Approve`とパッチ識別情報を確認できなければ適用してはならない。Claude Codeはレビュアー判断を上書きしない。
+
+## 3. 開発者AIの責任
+
+開発者AIは、レビューに提出する前に次を完了する。
+
+- 設計および実装
+- 恒久テストの追加
+- 変更の影響範囲に対する回帰テスト
+- 必要な全回帰テスト
+- バグ注入検証
+- 各注入後の完全復元
+- `git diff --check`
+- secret scan
+- fixtureと一時ファイルの復元・除去
+- コミット後のworking tree clean確認
+- レビュー用パッチの作成
+- 検証結果とパッチ識別情報の報告
+- 引き渡し完了時点でremoteが未変更であることの確認
+
+回帰範囲を過去の固定件数で定義してはならない。正本は、**その時点でリポジトリに存在し、変更の影響を受ける全検査**である。開発者AIは、実行した検査名、スクリプト数、成功件数を個別の引き渡し報告に明記する。
+
+開発者AIは、レビュアーAIから`Request changes`を受けた場合、指摘を反映した新しいcleanなパッチを作成し、識別情報を更新して再レビューへ提出する。旧パッチを再利用してはならない。
+
+## 4. バグ注入の安全規則
+
+バグ注入は開発者AIの責任であり、次の条件をすべて守る。
+
+- push対象worktreeで直接実施せず、disposable worktreeまたは一時コピーで実施する
+- 1件ずつ「注入 → 期待する失敗の確認 → 復元 → 空diff確認」を完結させる
+- 複数の注入を同時に残さない
+- 各注入後に`git diff --exit-code`等で完全復元を確認する
+- セッションが中断した場合、未復元の可能性があるものとして扱う
+- 再開時は、最初にworking treeと注入対象行を確認する
+- 最終パッチ作成前に、非注入の正式状態で全通常検査を再実行する
+
+開発者AIが注入後の完全復元を確認できない場合、パッチをレビューへ提出してはならない。
+
+## 5. 開発者AIからレビュアーAIへの引き渡し
+
+開発者AIは、次の情報を一組としてレビュアーAIへ渡す。
+
+```text
+パッチファイル
+ファイルサイズ
+SHA-256
+stable patch-id
+ローカル完全コミットSHA
+親SHA
+tree SHA
+変更ファイル一覧
+変更意図
+影響範囲
+実行した検査と成功件数
+バグ注入結果
+復元確認
+git diff --check結果
+secret scan結果
+working tree clean
+remote未変更
 ```
-人間がボトルネックになっており、手間がかかっていた。
 
-### 変更後（今後）
+レビュアーAIは、パッチと検証証跡を独立に確認し、`Approve`または`Request changes`を明示する。
+
+## 6. レビュアー承認後のClaude Codeへの引き渡し
+
+レビュアーAIが`Approve`した後、人間は次の情報だけをClaude Codeへ渡す。
+
+```text
+承認済みパッチ
+パッチ識別情報
+対象repositoryとbranch
+期待remote HEAD
+許可された変更ファイル
+最小受入検査
+push条件
+禁止操作
 ```
-Codex: 差分/パッチを作成
-  ↓
-人間: その差分をClaude Codeへ渡す
-  ↓
-Claude Code: 差分を適用 → 対象テストを実行 → バグ注入検証（該当する場合）
-             → 関連する全回帰スイートを実行 → git diff --check・secret scan
-             → 問題なければ origin へ force無しでpush
-  ↓
-人間: 最終照合（リモート反映後の確認のみ）
+
+Claude Codeは、引き渡し情報を独自に補完したり、未承認の別パッチへ置き換えたりしてはならない。
+
+## 7. Claude Codeの責任
+
+Claude Codeの担当は、承認済み変更を安全に反映する次の作業に限定する。
+
+- `git fetch`と対象ブランチの同期
+- 作業開始前のworking tree clean確認
+- local HEADとremote HEADの確認
+- 引き渡し指示のexpected remote HEADとの照合
+- パッチのファイルサイズ、SHA-256、stable patch-id等の同一性確認
+- `git apply --check`による適用可能性確認
+- 承認済みパッチの適用
+- 適用後の変更ファイルが承認範囲内であることの確認
+- レビュアーAIが指定した最小受入検査
+- `git diff --check`
+- 簡易secret scan
+- 一時ファイル、fixture差分、未追跡ファイルがなくworking treeがcleanであることの確認
+- forceなしpush
+- commit SHA、親SHA、tree SHA、remote SHA、変更ファイル一覧、検査結果の報告
+
+作業開始時は次を契約とする。
+
+```text
+git fetchを行い、引き渡し指示に記載されたexpected remote HEADと照合する。
 ```
 
-Codexが自分でpushする必要はなくなる。**Codexは「何を変更すべきか」「なぜそれが正しいか」を明確に伝えることに専念してよい。**
+本文中の「現在のHEAD」や過去のSHAを、将来作業の固定baseとして扱ってはならない。remote branchがexpected remote HEADから進んでいる、またはlocal HEADとremote HEADが一致しない場合、Claude Codeは適用せず停止して人間へ報告する。
 
----
+## 8. Claude Codeの禁止事項と停止条件
 
-## 2. Codexがパッチを渡す際に含めてほしい情報
+Claude Codeは次を行わない。
 
-Claude Codeがそのまま適用・検証・pushできるよう、以下を揃えて人間経由で渡すこと。
+- バグ注入
+- 全回帰の重複実行
+- 新規テスト作成
+- 実装修正
+- 設計変更
+- 設計文書の独自訂正
+- テストを通すためのassertion緩和
+- 競合の意味的解消
+- commit amend
+- rebase
+- force pushまたは`--force-with-lease`
+- レビュアー判断の上書き
 
-1. **差分そのもの**（`git diff`の出力、パッチファイル、または変更後のファイル全文のいずれか）
-2. **変更対象ファイルのパス**（相対パス、リポジトリルート基準）
-3. **変更の意図・根拠**（何を修正/追加するのか、なぜ必要か。特にバグ修正の場合は再現手順や失敗するテストケース）
-4. **検証済みの内容**（Codex側で既に実行したテストがあれば、その結果。無くても構わないが、あればClaude Code側の確認が速くなる）
-5. **影響範囲の見立て**（共有ファイル、例えば`quantity_sidecar_binding_core.js`のような複数箇所から参照されるファイルを変更した場合は、その旨を明記。Claude Code側で影響を受ける全回帰スイートを判断する材料になる）
+したがって、**Claude Codeはバグ注入を行わない**。また、**Claude Codeは全回帰を重複実行しない**。全回帰とバグ注入の証跡は開発者AIが作成し、Claude CodeはレビュアーAIが指定した最小受入検査だけを行う。
 
-パッチが大きい場合は、GitHub上のブランチ名やコミットSHAを渡してもらえれば、Claude Code側でそのブランチをfetchして取り込むことも可能。
+パッチ適用、最小受入検査、diff確認、secret scan、clean確認、またはpush前確認で問題を見つけた場合は、**問題時は修正せず停止**し、人間へ差し戻す。競合時に内容を推測して解消してはならない。途中状態がある場合は、承認済みの安全な中止手順で適用前の状態へ戻し、その事実を報告する。
 
----
+**force push禁止**。履歴を書き換える操作も禁止する。通常のforceなしpushがnon-fast-forward等で拒否された場合も、自分でrebaseやamendを行わず停止する。
 
-## 3. Claude Codeが引き受ける作業範囲
+## 9. push後の最終照合
 
-- 差分の適用（`git apply`／手動編集のいずれか、状況に応じて選択）
-- 対象範囲の回帰テスト実行（Node側は`node <file>.js`形式、Playwright依存の5スイートは`tools/design_notes`配下で実行）
-- 修正がバグ修正の場合、バグ注入検証（防御を一時的に無効化してテストが実際に失敗することを確認 → 復元）
-- 影響範囲全体の回帰確認（共有ファイルを変更した場合は全17 Nodeスイート・5 Playwrightスイート）
-- `git diff --check`（空白エラー確認）・簡易secret scan
-- 設計ドキュメント（`tools/design_notes/shadow_mode_integration_design.md`等）への訂正記録の追記（該当する場合）
-- `git push`（**force無し**、既存コミット履歴を書き換えない）
-- 人間への結果報告（何を適用し、どのテストが何件成功したか）
+Claude Codeは、push後にremote branch SHAを取得し、次を人間経由でレビュアーAIへ報告する。
 
----
+- push後の完全commit SHA
+- 親SHA
+- tree SHA
+- remote branch SHA
+- 変更ファイル一覧
+- 最小受入検査の成功件数
+- `git diff --check`結果
+- secret scan結果
+- working tree clean
+- force未使用
 
-## 4. Claude Codeが引き受けない作業
+レビュアーAIは、remote SHA、tree、親子関係、変更範囲、禁止ファイル不変、必要なCI状態を最終照合する。この照合が完了するまで、次の開発段階へ進まない。
 
-- パッチの設計・実装そのもの（Codexの担当領域。Claude Codeは「適用・検証・push」を代替するのであり、Codexの設計判断を上書きしない）
-- 明らかに設計上の疑義がある変更を無条件に適用すること（不明点があれば、適用前に人間へ確認する）
-- `--force`を伴うpush、コミット履歴の書き換え、ブランチの削除等の破壊的操作（明示的な指示がない限り行わない）
-- GitHub Codespaces自体の操作（Claude Codeはこのセッション専用の別実行環境で動いており、Codespacesへは直接アクセスできない。ただしこのリポジトリへのpushは、Codespacesを経由せずこのセッションから直接可能）
+## 10. リポジトリ情報の扱い
 
----
+- 対象リポジトリ: `S0lLVUNISTA4MDIyNjk3MjA5/260717`
+- 主な作業ブランチ: `claude/pdf-excel-json-overview-pigbne`
+- B-3d全体の範囲・制約: `tools/design_notes/b3d_handoff.md`
 
-## 5. リポジトリ情報
+このプロトコルv2改訂時点の参考情報は、commit `bd51409f00df6eda324d1642701c0645f3d2a07f`、tree `b2cf2e19d930ce2a796e670a6d4d621dfa93cd0d`である。この値は改訂作業の出発点を記録するだけであり、将来作業のexpected remote HEADではない。
 
-- **対象リポジトリ**: `S0lLVUNISTA4MDIyNjk3MjA5/260717`
-- **作業ブランチ**: `claude/pdf-excel-json-overview-pigbne`
-- **現在のHEAD**（本ドキュメント作成時点）: `ff288bceb81455161109cd944e0081bf219f20dc`（"Fix B-3d browser drift verification gaps"）
-- **直近の経緯**: B-3c（trace-comparison record set validatorの二層検証器、Node側）が7巡のレビューを経て承認済み（コミット`464061b`）。続くB-3d Stage 1（browser schema生成・Node/browser drift検証基盤）はCodexが実装し、人間経由でリポジトリへ反映済み（コミット`31fd3cf`, `ff288bc`）。次フェーズ（B-3d Stage 2以降：opt-in UI・trace-comparison JSON download等）の作業が対象になる想定。
-- **B-3d全体の範囲・制約**: `tools/design_notes/b3d_handoff.md`を参照（このリポジトリのレビュー作法、B-3dの範囲限定、対象外項目を要約済み）。
+## 11. 改訂履歴
 
----
+### 2026-07-22 v2
 
-## 6. このプロジェクトのレビュー作法（Codexが把握しておくと手戻りが減る点）
+- Claude Codeの担当を、承認済みパッチの同一性確認・適用・最小受入検査・forceなしpushへ縮小
+- 全回帰、バグ注入、復元、実装修正は開発者AIの責任へ移管
+- レビュアーAIの`Approve`を必須適用条件として追加
 
-このリポジトリのレビュアーは非常に厳格で、「producerでは生成不能なartifactが誤って受理される／有効なartifactが誤って拒否される」という具体的なexploitシナリオを伴う指摘を繰り返す。過去の指摘パターンから、Codex側でパッチを作る際に踏まえておくとよい点：
+### 2026-07-22 v1
 
-- **別実装を複製しない**：同じ計算ロジックをNode側とbrowser側で別々に書かない。既存の共有コア（`quantity_sidecar_binding_core.js`、UMD対応済み）から関数をexportして両方で再利用する設計を踏襲する。
-- **修正には必ず恒久テストを添える**：バグ修正なら、その防御を無効化すると実際にテストが落ちることまで確認済みであることが望ましい（Claude Code側でも改めて確認するが、Codex側で事前に確認済みなら記載してもらえると早い）。
-- **「テストが通る」だけでは不十分**：追加したテストが本当にその防御を検証しているか（他の既存チェックが偶然同じ入力を別理由で拒否していないか）を意識すること。
-
----
-
-## 7. 連絡・確認が必要な場合
-
-Claude Codeが適用前に疑義を感じた場合（設計意図が不明、影響範囲が読み切れない、既存の承認済み契約と矛盾する等）は、無条件に適用せず、人間経由でCodexへ確認を差し戻す。
+- 人間が行っていたパッチ適用・検証・pushをClaude Codeへ移す初版を作成
